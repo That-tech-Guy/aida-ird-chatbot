@@ -1,0 +1,14 @@
+# Never upload API keys or private settings
+.streamlit/secrets.toml
+.env
+
+# Ignore local Python environments
+venv/
+.venv/
+
+# Ignore Python temporary files
+__pycache__/
+*.pyc
+
+# Ignore VS Code-specific settings
+.vscode/
