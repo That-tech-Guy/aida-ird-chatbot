@@ -1,0 +1,142 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+
+    <meta
+        name="viewport"
+        content="width=device-width, initial-scale=1.0"
+    >
+
+    <title>Inland Revenue Department Anguilla</title>
+
+    <link
+        rel="stylesheet"
+        href="{{ url_for('static', filename='css/style.css') }}"
+    >
+</head>
+
+<body>
+
+  
+    
+
+    <!--
+        The official IRD homepage is displayed behind the chatbot.
+
+        This gives the client an accurate demonstration of how
+        A.I.D.A. would appear on their existing website without
+        rebuilding or modifying the real website.
+    -->
+    <main class="website-preview">
+
+        <iframe
+            class="ird-website-frame"
+            src="https://ird.gov.ai/"
+            title="Anguilla Inland Revenue Department website"
+            loading="eager"
+        ></iframe>
+
+    </main>
+
+    <!-- Floating chatbot launcher -->
+    <button
+        class="chat-launcher"
+        id="chat-launcher"
+        type="button"
+        aria-label="Open A.I.D.A. chatbot"
+    >
+        <img
+            src="{{ url_for('static', filename='images/aida_logo.jpeg') }}"
+            alt="A.I.D.A."
+        >
+
+        <span class="online-indicator"></span>
+    </button>
+
+    <!-- Chatbot window -->
+    <aside
+        class="chat-widget"
+        id="chat-widget"
+        aria-label="A.I.D.A. chatbot"
+    >
+
+        <header class="chat-header">
+            <div class="chat-agent">
+
+                <img
+                    src="{{ url_for('static', filename='images/aida_logo.jpeg') }}"
+                    alt="A.I.D.A."
+                >
+
+                <div>
+                    <strong>A.I.D.A.</strong>
+                    <span>Anguilla IRD Assistant</span>
+                </div>
+
+            </div>
+
+            <button
+                class="chat-close-button"
+                id="chat-close-button"
+                type="button"
+                aria-label="Close chatbot"
+            >
+                ×
+            </button>
+        </header>
+
+        <div class="chat-language-bar">
+            <button class="language-button active" type="button">
+                English
+            </button>
+
+            <button class="language-button" type="button">
+                Español
+            </button>
+        </div>
+
+        <div class="chat-messages" id="chat-messages">
+
+            <div class="message-row assistant-row">
+                <img
+                    class="message-avatar"
+                    src="{{ url_for('static', filename='images/aida_logo.jpeg') }}"
+                    alt=""
+                >
+
+                <div class="message assistant-message">
+                    Hello! I am A.I.D.A. How may I help you with an
+                    Inland Revenue Department service today?
+                </div>
+            </div>
+
+        </div>
+
+        <div class="quick-questions">
+            <button type="button">Business licences</button>
+            <button type="button">Vehicle licences</button>
+            <button type="button">Property tax</button>
+        </div>
+
+        <form class="chat-form" id="chat-form">
+            <input
+                id="chat-input"
+                type="text"
+                placeholder="Ask A.I.D.A. a question..."
+                autocomplete="off"
+            >
+
+            <button type="submit" aria-label="Send message">
+                ➤
+            </button>
+        </form>
+
+    </aside>
+
+    <script
+        src="{{ url_for('static', filename='js/chatbot.js') }}"
+    ></script>
+
+</body>
+</html>
