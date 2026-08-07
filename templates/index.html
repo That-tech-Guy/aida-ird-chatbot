@@ -8,7 +8,7 @@
         content="width=device-width, initial-scale=1.0"
     >
 
-    <title>Inland Revenue Department Anguilla</title>
+    <title>A.I.D.A. — Anguilla Inland Revenue Assistant</title>
 
     <link
         rel="stylesheet"
@@ -19,8 +19,8 @@
 <body>
 
     <!--
-        The official IRD homepage remains behind the demonstration
-        widget so the client can see A.I.D.A. in a realistic setting.
+        The official IRD homepage remains behind the demonstration widget.
+        In production, the widget would be inserted directly into that site.
     -->
     <main class="website-preview">
         <iframe
@@ -31,7 +31,7 @@
         ></iframe>
     </main>
 
-    <!-- Floating launcher shown while the full chatbot is closed -->
+    <!-- Circular launcher shown while the chatbot is closed -->
     <button
         class="chat-launcher"
         id="chat-launcher"
@@ -40,6 +40,8 @@
         aria-controls="chat-widget"
         aria-expanded="false"
     >
+        <span class="launcher-glow" aria-hidden="true"></span>
+
         <img
             src="{{ url_for('static', filename='images/aida_logo.jpeg') }}"
             alt="A.I.D.A."
@@ -48,11 +50,7 @@
         <span class="launcher-status" aria-hidden="true"></span>
     </button>
 
-    <!--
-        The widget structure follows the supplied design:
-        branded green header, chat history, service buttons,
-        typing indicator and a rounded message composer.
-    -->
+    <!-- Main floating chatbot -->
     <aside
         class="chat-widget"
         id="chat-widget"
@@ -61,35 +59,55 @@
     >
         <header class="chat-header">
 
-            <!-- Decorative palm-like line art -->
-            <svg
-                class="header-decoration"
-                viewBox="0 0 180 120"
+            <!-- Real illustration assets based on the supplied Anguilla and IRD imagery -->
+            <div
+                class="header-art"
                 aria-hidden="true"
             >
-                <path d="M175 111C139 76 118 52 101 6" />
-                <path d="M136 64C154 58 168 59 179 63" />
-                <path d="M126 50C145 43 159 43 174 47" />
-                <path d="M115 35C132 28 146 27 159 31" />
-                <path d="M105 20C118 14 130 12 141 15" />
-                <path d="M140 70C132 86 128 99 128 116" />
-                <path d="M124 55C113 73 108 91 108 110" />
-                <path d="M111 39C98 55 91 72 88 90" />
-            </svg>
+                <img
+                    class="header-art-image header-document-art"
+                    src="{{ url_for('static', filename='images/header/document.png') }}"
+                    alt=""
+                >
+
+                <img
+                    class="header-art-image header-anguilla-art"
+                    src="{{ url_for('static', filename='images/header/anguilla-map.png') }}"
+                    alt=""
+                >
+
+                <img
+                    class="header-art-image header-bank-art"
+                    src="{{ url_for('static', filename='images/header/bank.png') }}"
+                    alt=""
+                >
+
+                <img
+                    class="header-art-image header-revenue-art"
+                    src="{{ url_for('static', filename='images/header/revenue.png') }}"
+                    alt=""
+                >
+            </div>
 
             <div class="chat-agent">
                 <div class="header-avatar-wrap">
+                    <span class="avatar-neon-ring" aria-hidden="true"></span>
+
                     <img
                         class="header-avatar"
                         src="{{ url_for('static', filename='images/aida_logo.jpeg') }}"
                         alt="A.I.D.A."
                     >
+
                     <span class="avatar-status" aria-hidden="true"></span>
                 </div>
 
                 <div class="agent-copy">
                     <h1>A.I.D.A.</h1>
-                    <p>Anguilla Inland Revenue Assistant</p>
+
+                    <p>
+                        Anguilla Inland Revenue Assistant
+                    </p>
 
                     <div class="online-status">
                         <span aria-hidden="true"></span>
@@ -99,13 +117,44 @@
             </div>
 
             <div class="header-controls">
+
                 <button
                     class="header-control"
                     id="chat-minimise-button"
                     type="button"
                     aria-label="Minimise chatbot"
+                    title="Minimise"
                 >
-                    <span aria-hidden="true">−</span>
+                    <svg viewBox="0 0 24 24" aria-hidden="true">
+                        <path d="M5 12h14" />
+                    </svg>
+                </button>
+
+                <button
+                    class="header-control"
+                    id="chat-expand-button"
+                    type="button"
+                    aria-label="Make chatbot larger"
+                    title="Expand chatbot"
+                    aria-pressed="false"
+                >
+                    <svg
+                        class="expand-icon"
+                        viewBox="0 0 24 24"
+                        aria-hidden="true"
+                    >
+                        <path d="M8 3H3v5M16 3h5v5M8 21H3v-5M16 21h5v-5" />
+                        <path d="m3 8 6-6M21 8l-6-6M3 16l6 6M21 16l-6 6" />
+                    </svg>
+
+                    <svg
+                        class="contract-icon"
+                        viewBox="0 0 24 24"
+                        aria-hidden="true"
+                    >
+                        <path d="M9 9H4V4M15 9h5V4M9 15H4v5M15 15h5v5" />
+                        <path d="m4 4 6 6M20 4l-6 6M4 20l6-6M20 20l-6-6" />
+                    </svg>
                 </button>
 
                 <button
@@ -113,21 +162,86 @@
                     id="chat-close-button"
                     type="button"
                     aria-label="Close chatbot"
+                    title="Close"
                 >
-                    <span aria-hidden="true">×</span>
+                    <svg viewBox="0 0 24 24" aria-hidden="true">
+                        <path d="m5 5 14 14M19 5 5 19" />
+                    </svg>
                 </button>
             </div>
         </header>
 
+        <!-- Conversation -->
         <section
             class="chat-body"
             id="chat-messages"
             aria-live="polite"
+        ></section>
+
+        <!--
+            Help drawer appears at the bottom of the widget and contains
+            Quick Actions and Popular Questions.
+        -->
+        <section
+            class="help-drawer"
+            id="help-drawer"
+            aria-hidden="true"
         >
-            <!-- The initial conversation is inserted by chatbot.js -->
+            <div class="drawer-section">
+                <div class="drawer-heading">
+                    <div>
+                        <strong>Quick Actions</strong>
+                        <span>Choose a service</span>
+                    </div>
+
+                    <button
+                        class="drawer-close"
+                        id="drawer-close"
+                        type="button"
+                        aria-label="Hide quick actions"
+                    >
+                        ×
+                    </button>
+                </div>
+
+                <div
+                    class="quick-actions-grid"
+                    id="quick-actions-grid"
+                ></div>
+            </div>
+
+            <div class="drawer-section popular-section">
+                <div class="drawer-heading compact-heading">
+                    <div>
+                        <strong>Popular Questions</strong>
+                        <span>Frequently requested help</span>
+                    </div>
+                </div>
+
+                <div
+                    class="popular-questions"
+                    id="popular-questions"
+                ></div>
+            </div>
         </section>
 
+        <!-- Bottom composer -->
         <footer class="chat-footer">
+            <button
+                class="help-button"
+                id="help-button"
+                type="button"
+                aria-controls="help-drawer"
+                aria-expanded="false"
+                title="Show quick actions"
+            >
+                <svg viewBox="0 0 24 24" aria-hidden="true">
+                    <path d="M12 2 9.8 8.4 3 10l6.8 1.6L12 18l2.2-6.4L21 10l-6.8-1.6L12 2Z" />
+                </svg>
+
+                <span>Help</span>
+            </button>
+
             <form class="chat-form" id="chat-form">
                 <div class="message-input-shell">
                     <input
@@ -154,6 +268,7 @@
 
                 <button
                     class="send-button"
+                    id="send-button"
                     type="submit"
                     aria-label="Send message"
                 >
