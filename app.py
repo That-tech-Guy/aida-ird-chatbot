@@ -7,20 +7,26 @@ This Flask application:
 - loads the existing IRD knowledge base and optional web additions
 - sends questions to Gemini
 - returns structured form resources separately from the AI response
-- creates ElevenLabs speech without exposing API keys to the browser
+- creates Gemini text-to-speech audio without exposing API keys to the browser
 """
 
+import base64
+import csv
 import html
+import io
 import json
 import os
 import re
+import threading
 import tomllib
+import wave
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
-import requests as http_requests
 from flask import Flask, Response, jsonify, render_template, request, url_for
 from google import genai
+from google.genai import types
 
 
 # ---------------------------------------------------------
@@ -77,13 +83,17 @@ FILLABLE_FORMS_FOLDER = (
     / "fillable"
 )
 
-DEFAULT_GEMINI_MODEL = "gemini-3.1-flash-lite"
-DEFAULT_ELEVENLABS_MODEL = "eleven_multilingual_v2"
+SURVEY_RESULTS_FILE = (
+    APP_FOLDER
+    / "data"
+    / "aida_web_survey.csv"
+)
 
-# This lower-bandwidth MP3 option is deliberately conservative.
-# It is suitable for browser playback and avoids relying on a
-# higher-quality tier-specific output format.
-DEFAULT_ELEVENLABS_OUTPUT_FORMAT = "mp3_22050_32"
+SURVEY_WRITE_LOCK = threading.Lock()
+
+DEFAULT_GEMINI_MODEL = "gemini-3.1-flash-lite"
+DEFAULT_GEMINI_TTS_MODEL = "gemini-3.1-flash-tts-preview"
+DEFAULT_GEMINI_TTS_VOICE = "Kore"
 
 MAX_QUESTION_LENGTH = 1500
 MAX_HISTORY_MESSAGES = 8
@@ -141,26 +151,14 @@ GEMINI_MODEL_NAME = get_secret(
     DEFAULT_GEMINI_MODEL,
 )
 
-ELEVENLABS_API_KEY = get_secret(
-    "ELEVENLABS_API_KEY"
+GEMINI_TTS_MODEL = get_secret(
+    "GEMINI_TTS_MODEL",
+    DEFAULT_GEMINI_TTS_MODEL,
 )
 
-ELEVENLABS_VOICE_ID = get_secret(
-    "ELEVENLABS_VOICE_ID"
-)
-
-ELEVENLABS_FALLBACK_VOICE_ID = get_secret(
-    "ELEVENLABS_FALLBACK_VOICE_ID"
-)
-
-ELEVENLABS_MODEL_ID = get_secret(
-    "ELEVENLABS_MODEL_ID",
-    DEFAULT_ELEVENLABS_MODEL,
-)
-
-ELEVENLABS_OUTPUT_FORMAT = get_secret(
-    "ELEVENLABS_OUTPUT_FORMAT",
-    DEFAULT_ELEVENLABS_OUTPUT_FORMAT,
+GEMINI_TTS_VOICE = get_secret(
+    "GEMINI_TTS_VOICE",
+    DEFAULT_GEMINI_TTS_VOICE,
 )
 
 AIDA_SPOKEN_NAME = get_secret(
@@ -357,6 +355,7 @@ def format_recent_conversation(
 def ask_aida(
     question: str,
     recent_messages: list[dict[str, str]],
+    voice_mode: bool = False,
 ) -> str:
     """Send a question to Gemini with the approved context."""
 
@@ -373,6 +372,18 @@ def ask_aida(
         recent_messages
     )
 
+    voice_instruction = ""
+
+    if voice_mode:
+        voice_instruction = """
+VOICE MODE RESPONSE:
+- Keep the answer concise because it will also be spoken aloud.
+- Aim for no more than 55 words unless a safety-critical clarification is needed.
+- Prefer 1 to 3 short sentences or no more than 3 short bullet points.
+- Do not repeat the visitor's question.
+- If a form is relevant, name the form briefly; the interface will show its buttons.
+"""
+
     request_text = f"""
 Recent conversation:
 
@@ -380,6 +391,8 @@ Recent conversation:
 
 Answer the visitor's latest question using the approved A.I.D.A.
 instructions and IRD information.
+
+{voice_instruction}
 
 Latest question:
 {question}
@@ -427,22 +440,56 @@ def enrich_form_resource(
     Add fillable-file availability and URLs to one catalogue item.
     """
 
-    fillable_filename = str(
+    filename_candidates: list[str] = []
+
+    primary_filename = str(
         form_record.get(
             "fillable_filename",
             "",
         )
     ).strip()
 
-    fillable_path = (
-        FILLABLE_FORMS_FOLDER
-        / fillable_filename
+    if primary_filename:
+        filename_candidates.append(
+            primary_filename
+        )
+
+    alternate_filenames = form_record.get(
+        "fillable_filenames",
+        [],
     )
 
-    fillable_available = bool(
-        fillable_filename
-        and fillable_path.is_file()
-    )
+    if isinstance(alternate_filenames, list):
+        for filename in alternate_filenames:
+            cleaned_filename = str(filename).strip()
+
+            if (
+                cleaned_filename
+                and cleaned_filename not in filename_candidates
+            ):
+                filename_candidates.append(
+                    cleaned_filename
+                )
+
+    fillable_filename = ""
+    fillable_available = False
+
+    for candidate_filename in filename_candidates:
+        candidate_path = (
+            FILLABLE_FORMS_FOLDER
+            / candidate_filename
+        )
+
+        if candidate_path.is_file():
+            fillable_filename = candidate_filename
+            fillable_available = True
+            break
+
+    if (
+        not fillable_filename
+        and filename_candidates
+    ):
+        fillable_filename = filename_candidates[0]
 
     fillable_url = None
 
@@ -476,6 +523,10 @@ def enrich_form_resource(
         "official_url": form_record.get(
             "official_url",
             "https://ird.gov.ai/Forms",
+        ),
+        "official_button_label": form_record.get(
+            "official_button_label",
+            "Official IRD PDF",
         ),
         "fillable_available": fillable_available,
         "fillable_url": fillable_url,
@@ -582,9 +633,7 @@ def find_matching_forms(
 # ---------------------------------------------------------
 
 def prepare_text_for_speech(text: str) -> str:
-    """
-    Remove Markdown and apply pronunciation aliases for ElevenLabs.
-    """
+    """Remove Markdown and prepare the visible response for Gemini TTS."""
 
     speech_text = html.unescape(text)
 
@@ -641,158 +690,78 @@ def prepare_text_for_speech(text: str) -> str:
     return speech_text[:MAX_SPEECH_LENGTH]
 
 
-def extract_elevenlabs_detail(
-    response: http_requests.Response,
-) -> str:
-    """Extract a readable ElevenLabs error without exposing secrets."""
+def pcm_to_wav(
+    pcm_audio: bytes,
+    sample_rate: int = 24000,
+) -> bytes:
+    """Wrap Gemini's 24 kHz mono PCM output in a browser-playable WAV."""
 
-    try:
-        payload = response.json()
+    output = io.BytesIO()
 
-    except ValueError:
-        return (
-            response.text.strip()
-            or "The ElevenLabs request failed."
-        )[:500]
+    with wave.open(output, "wb") as wav_file:
+        wav_file.setnchannels(1)
+        wav_file.setsampwidth(2)
+        wav_file.setframerate(sample_rate)
+        wav_file.writeframes(pcm_audio)
 
-    detail = payload.get("detail")
-
-    if isinstance(detail, dict):
-        return str(
-            detail.get("message")
-            or detail.get("status")
-            or detail
-        )[:500]
-
-    if detail:
-        return str(detail)[:500]
-
-    return str(
-        payload.get("message")
-        or payload.get("error")
-        or "The ElevenLabs request failed."
-    )[:500]
+    return output.getvalue()
 
 
-def speech_error_code(
-    status_code: int,
-    detail: str,
-) -> str:
-    """Map ElevenLabs failures to a safe browser-facing code."""
+def extract_gemini_audio(response: Any) -> bytes | None:
+    """Return the first audio block from a Gemini TTS response."""
 
-    lowered = detail.lower()
+    candidates = getattr(
+        response,
+        "candidates",
+        None,
+    ) or []
 
-    if status_code in {401, 403}:
-        return "speech_authentication"
-
-    if status_code == 402:
-        if "voice" in lowered:
-            return "voice_not_available"
-        return "speech_plan_or_quota"
-
-    if status_code == 404:
-        return "voice_not_found"
-
-    if "quota" in lowered or "credit" in lowered:
-        return "speech_plan_or_quota"
-
-    return "speech_service_error"
-
-
-def friendly_speech_error(
-    error_code: str,
-) -> str:
-    """Return a practical, non-technical speech error message."""
-
-    messages = {
-        "speech_authentication": (
-            "ElevenLabs rejected the API key. Check "
-            "ELEVENLABS_API_KEY in secrets.toml."
-        ),
-        "voice_not_available": (
-            "This ElevenLabs voice is not available through the API "
-            "on the current plan. Choose a Default voice, copy its "
-            "voice ID, and restart the Flask app."
-        ),
-        "speech_plan_or_quota": (
-            "The ElevenLabs plan or remaining credits do not allow "
-            "this speech request."
-        ),
-        "voice_not_found": (
-            "The configured ElevenLabs voice ID could not be found."
-        ),
-        "speech_service_error": (
-            "ElevenLabs could not generate speech for this response."
-        ),
-    }
-
-    return messages.get(
-        error_code,
-        messages["speech_service_error"],
-    )
-
-
-def request_speech_for_voice(
-    text: str,
-    voice_id: str,
-) -> tuple[
-    bytes | None,
-    int,
-    str,
-]:
-    """Make one ElevenLabs speech request for one voice ID."""
-
-    endpoint = (
-        "https://api.elevenlabs.io/v1/text-to-speech/"
-        f"{voice_id}"
-    )
-
-    response = http_requests.post(
-        endpoint,
-        params={
-            "output_format": ELEVENLABS_OUTPUT_FORMAT,
-        },
-        headers={
-            "xi-api-key": ELEVENLABS_API_KEY,
-            "Content-Type": "application/json",
-            "Accept": "audio/mpeg",
-        },
-        json={
-            "text": text,
-            "model_id": ELEVENLABS_MODEL_ID,
-        },
-        timeout=60,
-    )
-
-    if response.ok:
-        return (
-            response.content,
-            response.status_code,
-            "",
+    for candidate in candidates:
+        content = getattr(
+            candidate,
+            "content",
+            None,
         )
 
-    return (
-        None,
-        response.status_code,
-        extract_elevenlabs_detail(response),
-    )
+        parts = getattr(
+            content,
+            "parts",
+            None,
+        ) or []
+
+        for part in parts:
+            inline_data = getattr(
+                part,
+                "inline_data",
+                None,
+            )
+
+            data = getattr(
+                inline_data,
+                "data",
+                None,
+            )
+
+            if isinstance(data, str):
+                try:
+                    data = base64.b64decode(data)
+                except (ValueError, TypeError):
+                    data = None
+
+            if isinstance(data, (bytes, bytearray)) and data:
+                return bytes(data)
+
+    return None
 
 
 def create_speech_audio(
     text: str,
 ) -> tuple[bytes, str]:
-    """
-    Create MP3 audio, optionally trying a fallback voice.
-    """
+    """Generate a WAV response using Gemini's native TTS model."""
 
-    if not ELEVENLABS_API_KEY:
+    if not GEMINI_API_KEY:
         raise RuntimeError(
-            "speech_not_configured:ELEVENLABS_API_KEY is missing."
-        )
-
-    if not ELEVENLABS_VOICE_ID:
-        raise RuntimeError(
-            "speech_not_configured:ELEVENLABS_VOICE_ID is missing."
+            "speech_not_configured:GEMINI_API_KEY is missing."
         )
 
     speech_text = prepare_text_for_speech(text)
@@ -802,121 +771,161 @@ def create_speech_audio(
             "There is no readable text to speak."
         )
 
-    voice_ids = [ELEVENLABS_VOICE_ID]
-
-    if (
-        ELEVENLABS_FALLBACK_VOICE_ID
-        and ELEVENLABS_FALLBACK_VOICE_ID
-        != ELEVENLABS_VOICE_ID
-    ):
-        voice_ids.append(
-            ELEVENLABS_FALLBACK_VOICE_ID
-        )
-
-    last_status = 500
-    last_detail = "Speech generation failed."
-
-    for voice_id in voice_ids:
-        audio, status, detail = request_speech_for_voice(
-            speech_text,
-            voice_id,
-        )
-
-        if audio is not None:
-            return audio, voice_id
-
-        last_status = status
-        last_detail = detail
-
-    error_code = speech_error_code(
-        last_status,
-        last_detail,
+    client = genai.Client(
+        api_key=GEMINI_API_KEY
     )
 
+    tts_prompt = f"""
+VOICE STYLE
+
+Professional Anguillan customer-service assistant.
+
+Speak with a natural Anguillan English accent from Anguilla in the
+Eastern Caribbean.
+
+The voice should sound like a friendly, knowledgeable Anguillan woman
+assisting members of the public through the Inland Revenue Department.
+She should sound warm, calm, confident, approachable, and professional.
+
+Use the natural rhythm, melody, pronunciation, and conversational pacing
+commonly heard in Anguilla. The Anguillan character should be noticeable,
+but subtle and authentic rather than exaggerated.
+
+Avoid sounding Jamaican, Trinidadian, Bajan, American, British, or like
+a generic Caribbean accent. Do not use an exaggerated island or
+tourist-style voice.
+
+Use clear Standard English suitable for government and financial
+information, while allowing a natural Anguillan cadence and intonation
+to come through.
+
+Speak at a moderate pace. Important information such as dates, dollar
+amounts, tax types, deadlines, reference numbers, and instructions
+should be pronounced especially clearly.
+
+PERSONALITY
+
+- Friendly and welcoming
+- Patient and reassuring
+- Knowledgeable without sounding overly formal
+- Professional enough for a government department
+- Conversational rather than robotic
+- Locally Anguillan without relying heavily on dialect or slang
+
+DELIVERY
+
+When greeting someone, sound genuinely welcoming.
+
+When explaining a process, slow down slightly and make each step easy
+to follow.
+
+When discussing compliance, payments, penalties, or deadlines, remain
+respectful and neutral rather than stern.
+
+The overall impression should be:
+"a helpful Anguillan IRD officer who knows the system and is happy to
+guide you."
+
+PRONUNCIATION
+
+Pronounce A.I.D.A. as {AIDA_SPOKEN_NAME}.
+Pronounce Anguilla as {ANGUILLA_SPOKEN_NAME}.
+
+OUTPUT RULE
+
+Read only the transcript below.
+Do not read any of these voice directions aloud.
+Do not announce section headings such as "VOICE STYLE", "PERSONALITY",
+"DELIVERY", "PRONUNCIATION", or "OUTPUT RULE".
+
+TRANSCRIPT:
+{speech_text}
+"""
+
+    last_error: Exception | None = None
+
+    # Gemini's TTS preview can very occasionally return no audio.
+    # Retry once before reporting a failure to the visitor.
+    for _ in range(2):
+        try:
+            response = client.models.generate_content(
+                model=GEMINI_TTS_MODEL,
+                contents=tts_prompt,
+                config=types.GenerateContentConfig(
+                    response_modalities=["AUDIO"],
+                    speech_config=types.SpeechConfig(
+                        voice_config=types.VoiceConfig(
+                            prebuilt_voice_config=(
+                                types.PrebuiltVoiceConfig(
+                                    voice_name=GEMINI_TTS_VOICE,
+                                )
+                            )
+                        )
+                    ),
+                ),
+            )
+
+            pcm_audio = extract_gemini_audio(
+                response
+            )
+
+            if pcm_audio:
+                return (
+                    pcm_to_wav(pcm_audio),
+                    GEMINI_TTS_VOICE,
+                )
+
+        except Exception as error:
+            last_error = error
+
+    if last_error:
+        app.logger.error(
+            "Gemini TTS failed: %s",
+            last_error,
+        )
+
     raise RuntimeError(
-        f"{error_code}:{last_detail}"
+        "speech_service_error:Gemini did not return playable audio."
+    )
+
+
+def friendly_speech_error(error_code: str) -> str:
+    """Return a safe browser-facing Gemini speech error message."""
+
+    messages = {
+        "speech_not_configured": (
+            "Gemini speech is not configured. Check GEMINI_API_KEY."
+        ),
+        "speech_service_error": (
+            "Gemini could not generate speech for this response. Please try again."
+        ),
+    }
+
+    return messages.get(
+        error_code,
+        messages["speech_service_error"],
     )
 
 
 def check_voice_access() -> dict[str, Any]:
-    """
-    Verify whether the configured voice can be read through the API.
-    """
+    """Report Gemini TTS configuration without making a billable TTS call."""
 
-    if not ELEVENLABS_API_KEY:
+    if not GEMINI_API_KEY:
         return {
             "available": False,
             "code": "speech_not_configured",
             "message": (
-                "ELEVENLABS_API_KEY is not configured."
+                "GEMINI_API_KEY is not configured."
             ),
         }
-
-    if not ELEVENLABS_VOICE_ID:
-        return {
-            "available": False,
-            "code": "speech_not_configured",
-            "message": (
-                "ELEVENLABS_VOICE_ID is not configured."
-            ),
-        }
-
-    endpoint = (
-        "https://api.elevenlabs.io/v1/voices/"
-        f"{ELEVENLABS_VOICE_ID}"
-    )
-
-    try:
-        response = http_requests.get(
-            endpoint,
-            headers={
-                "xi-api-key": ELEVENLABS_API_KEY,
-            },
-            timeout=20,
-        )
-
-    except http_requests.RequestException:
-        return {
-            "available": False,
-            "code": "speech_status_unreachable",
-            "message": (
-                "The ElevenLabs voice-status check could not connect."
-            ),
-        }
-
-    if response.ok:
-        try:
-            payload = response.json()
-        except ValueError:
-            payload = {}
-
-        return {
-            "available": True,
-            "code": "ok",
-            "message": "Speech is ready.",
-            "voice_id": ELEVENLABS_VOICE_ID,
-            "voice_name": payload.get("name"),
-            "voice_category": payload.get("category"),
-            "model": ELEVENLABS_MODEL_ID,
-            "output_format": ELEVENLABS_OUTPUT_FORMAT,
-        }
-
-    detail = extract_elevenlabs_detail(
-        response
-    )
-
-    error_code = speech_error_code(
-        response.status_code,
-        detail,
-    )
 
     return {
-        "available": False,
-        "code": error_code,
-        "message": friendly_speech_error(
-            error_code
-        ),
-        "status_code": response.status_code,
+        "available": True,
+        "code": "ok",
+        "message": "Gemini speech is configured.",
+        "model": GEMINI_TTS_MODEL,
+        "voice_name": GEMINI_TTS_VOICE,
+        "audio_format": "audio/wav",
     }
 
 
@@ -943,9 +952,8 @@ def health():
             "gemini_configured": bool(
                 GEMINI_API_KEY
             ),
-            "elevenlabs_configured": bool(
-                ELEVENLABS_API_KEY
-                and ELEVENLABS_VOICE_ID
+            "gemini_tts_configured": bool(
+                GEMINI_API_KEY
             ),
             "master_prompt_loaded": bool(
                 MASTER_PROMPT.strip()
@@ -966,10 +974,9 @@ def health():
                 PRIMARY_KNOWLEDGE_FILE.name
             ),
             "gemini_model": GEMINI_MODEL_NAME,
-            "speech_model": ELEVENLABS_MODEL_ID,
-            "speech_output_format": (
-                ELEVENLABS_OUTPUT_FORMAT
-            ),
+            "speech_model": GEMINI_TTS_MODEL,
+            "speech_voice": GEMINI_TTS_VOICE,
+            "speech_output_format": "audio/wav",
         }
     )
 
@@ -990,7 +997,7 @@ def forms():
 
 @app.get("/api/speech/status")
 def speech_status():
-    """Return a practical ElevenLabs voice-access diagnosis."""
+    """Return the current Gemini text-to-speech configuration status."""
 
     return jsonify(
         check_voice_access()
@@ -1056,10 +1063,18 @@ def chat():
         )
     )
 
+    voice_mode = bool(
+        payload.get(
+            "voice_mode",
+            False,
+        )
+    )
+
     try:
         answer = ask_aida(
             cleaned_question,
             recent_messages,
+            voice_mode=voice_mode,
         )
 
         matched_forms = find_matching_forms(
@@ -1104,9 +1119,164 @@ def chat():
     )
 
 
+@app.post("/api/survey")
+def survey():
+    """
+    Save a short anonymous website-chat survey.
+
+    No account details, IP addresses or secrets are written to this file.
+    The CSV is suitable for the local/client demonstration. A production
+    deployment should move this data to a managed database or approved
+    analytics store.
+    """
+
+    payload = request.get_json(
+        silent=True
+    )
+
+    if not isinstance(payload, dict):
+        return jsonify(
+            {
+                "error": (
+                    "The survey request must contain JSON data."
+                )
+            }
+        ), 400
+
+    rating = payload.get("rating")
+
+    try:
+        rating = int(rating)
+
+    except (TypeError, ValueError):
+        return jsonify(
+            {
+                "error": (
+                    "Please choose a rating from 1 to 5."
+                )
+            }
+        ), 400
+
+    if rating < 1 or rating > 5:
+        return jsonify(
+            {
+                "error": (
+                    "Please choose a rating from 1 to 5."
+                )
+            }
+        ), 400
+
+    comment = payload.get(
+        "comment",
+        "",
+    )
+
+    if not isinstance(comment, str):
+        comment = ""
+
+    comment = comment.strip()[:1000]
+
+    session_id = payload.get(
+        "session_id",
+        "",
+    )
+
+    if not isinstance(session_id, str):
+        session_id = ""
+
+    session_id = session_id.strip()[:120]
+
+    ended_reason = payload.get(
+        "ended_reason",
+        "inactivity_timeout",
+    )
+
+    if not isinstance(ended_reason, str):
+        ended_reason = "inactivity_timeout"
+
+    ended_reason = ended_reason.strip()[:80]
+
+    conversation_messages = payload.get(
+        "conversation_messages",
+        0,
+    )
+
+    try:
+        conversation_messages = max(
+            0,
+            int(conversation_messages),
+        )
+
+    except (TypeError, ValueError):
+        conversation_messages = 0
+
+    row = {
+        "submitted_at_utc": (
+            datetime.now(
+                timezone.utc
+            ).isoformat()
+        ),
+        "session_id": session_id,
+        "rating": rating,
+        "comment": comment,
+        "ended_reason": ended_reason,
+        "conversation_messages": (
+            conversation_messages
+        ),
+    }
+
+    fieldnames = list(row.keys())
+
+    try:
+        SURVEY_RESULTS_FILE.parent.mkdir(
+            parents=True,
+            exist_ok=True,
+        )
+
+        with SURVEY_WRITE_LOCK:
+            write_header = (
+                not SURVEY_RESULTS_FILE.exists()
+                or SURVEY_RESULTS_FILE.stat().st_size == 0
+            )
+
+            with SURVEY_RESULTS_FILE.open(
+                "a",
+                encoding="utf-8-sig",
+                newline="",
+            ) as survey_file:
+                writer = csv.DictWriter(
+                    survey_file,
+                    fieldnames=fieldnames,
+                )
+
+                if write_header:
+                    writer.writeheader()
+
+                writer.writerow(row)
+
+    except OSError:
+        app.logger.exception(
+            "Could not save the A.I.D.A. web survey."
+        )
+
+        return jsonify(
+            {
+                "error": (
+                    "The survey could not be saved."
+                )
+            }
+        ), 500
+
+    return jsonify(
+        {
+            "saved": True,
+        }
+    )
+
+
 @app.post("/api/speech")
 def speech():
-    """Convert one assistant response into MP3 audio."""
+    """Convert one assistant response into Gemini-generated WAV audio."""
 
     payload = request.get_json(
         silent=True
@@ -1181,7 +1351,7 @@ def speech():
 
     except Exception:
         app.logger.exception(
-            "Could not create ElevenLabs audio."
+            "Could not create Gemini speech audio."
         )
 
         return jsonify(
@@ -1195,10 +1365,10 @@ def speech():
 
     return Response(
         audio_bytes,
-        mimetype="audio/mpeg",
+        mimetype="audio/wav",
         headers={
             "Cache-Control": "no-store",
-            "X-AIDA-Voice-ID": voice_used,
+            "X-AIDA-Voice": voice_used,
         },
     )
 

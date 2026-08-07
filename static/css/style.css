@@ -320,112 +320,44 @@ a:focus-visible {
 .header-art {
     position: absolute;
     z-index: 1;
-    right: 0;
-    bottom: 0;
+    right: -10px;
+    bottom: -8px;
 
-    width: 58%;
-    min-width: 330px;
-    height: 100%;
+    width: 57%;
+    min-width: 300px;
+    height: 170px;
 
-    overflow: hidden;
+    overflow: visible;
     pointer-events: none;
 }
 
-.header-art::before {
-    position: absolute;
-    right: -38px;
-    bottom: -74px;
-
-    width: 270px;
-    height: 270px;
-
-    content: "";
-
-    background:
-        radial-gradient(
-            circle,
-            rgba(255, 143, 18, 0.32) 0%,
-            rgba(255, 121, 0, 0.13) 35%,
-            transparent 70%
-        );
-
-    border-radius: 50%;
+.anguilla-island {
+    fill: url("#islandFill");
+    stroke: rgba(92, 255, 139, 0.46);
+    stroke-width: 2;
+    stroke-linejoin: round;
 }
 
-.header-art-image {
-    position: absolute;
-
-    display: block;
-
-    object-fit: contain;
-
-    user-select: none;
-
-    filter:
-        drop-shadow(
-            0 0 8px
-            rgba(82, 232, 132, 0.10)
-        );
+.topographic-line {
+    fill: none;
+    stroke: rgba(255, 174, 58, 0.23);
+    stroke-linecap: round;
+    stroke-width: 1.4;
 }
 
-.header-document-art {
-    top: 17px;
-    left: 9%;
-
-    width: 74px;
-    height: 86px;
-
-    opacity: 0.30;
+.header-line-icon {
+    fill: none;
+    stroke: rgba(104, 244, 144, 0.38);
+    stroke-linecap: round;
+    stroke-linejoin: round;
+    stroke-width: 2.2;
 }
 
-.header-anguilla-art {
-    top: 43px;
-    left: 18%;
-
-    width: 58%;
-    max-width: 310px;
-    height: 100px;
-
-    opacity: 0.62;
-
-    filter:
-        drop-shadow(
-            0 0 10px
-            rgba(83, 235, 134, 0.16)
-        );
+.bank-icon,
+.money-icon {
+    stroke: rgba(255, 178, 58, 0.45);
 }
 
-.header-bank-art {
-    right: 19px;
-    bottom: -3px;
-
-    width: 93px;
-    height: 93px;
-
-    opacity: 0.30;
-
-    filter:
-        drop-shadow(
-            0 0 9px
-            rgba(255, 174, 58, 0.12)
-        );
-}
-
-.header-revenue-art {
-    top: 52px;
-    right: 7px;
-
-    width: 79px;
-    height: 79px;
-
-    opacity: 0.22;
-
-    filter:
-        drop-shadow(
-            0 0 9px
-            rgba(255, 184, 63, 0.12)
-        );
-}
 
 /* ---------------------------------------------------------
    Header identity
@@ -678,31 +610,6 @@ a:focus-visible {
 
 .message-group {
     margin-bottom: 17px;
-}
-
-.message-group.assistant-animated {
-    animation:
-        assistantMessageIn
-        380ms
-        cubic-bezier(0.22, 1, 0.36, 1);
-}
-
-@keyframes assistantMessageIn {
-    0% {
-        opacity: 0;
-
-        transform:
-            translateY(10px)
-            scale(0.988);
-    }
-
-    100% {
-        opacity: 1;
-
-        transform:
-            translateY(0)
-            scale(1);
-    }
 }
 
 .message-row {
@@ -1833,44 +1740,12 @@ a:focus-visible {
     }
 
     .header-art {
-        right: -32px;
+        right: -70px;
 
-        width: 66%;
-        min-width: 235px;
+        width: 72%;
+        min-width: 260px;
 
-        opacity: 0.82;
-    }
-
-    .header-document-art {
-        top: 25px;
-        left: 7%;
-
-        width: 56px;
-        height: 66px;
-    }
-
-    .header-anguilla-art {
-        top: 51px;
-        left: 13%;
-
-        width: 62%;
-        height: 76px;
-    }
-
-    .header-bank-art {
-        right: 18px;
-        bottom: 0;
-
-        width: 68px;
-        height: 68px;
-    }
-
-    .header-revenue-art {
-        top: 57px;
-        right: 3px;
-
-        width: 58px;
-        height: 58px;
+        opacity: 0.72;
     }
 
     .header-avatar {
@@ -2026,5 +1901,1259 @@ a:focus-visible {
 
     .attachment-button {
         width: 39px;
+    }
+}
+
+
+/* =====================================================================
+   V2 + V3 MERGED OVERRIDES
+   These rules are appended to the ORIGINAL style.css.
+   Existing rules above are intentionally retained.
+===================================================================== */
+
+
+/* ---------------------------------------------------------
+   V2: Real supplied illustrations in the header
+--------------------------------------------------------- */
+
+/* Preserve the old SVG in HTML but hide only its visual output. */
+.chat-header > svg.header-art {
+    display: none;
+}
+
+.real-header-art {
+    position: absolute;
+    z-index: 1;
+    right: 0;
+    bottom: 0;
+
+    width: 58%;
+    min-width: 330px;
+    height: 100%;
+
+    overflow: hidden;
+    pointer-events: none;
+}
+
+.real-header-art::before {
+    position: absolute;
+    right: -45px;
+    bottom: -78px;
+
+    width: 280px;
+    height: 280px;
+
+    content: "";
+
+    background:
+        radial-gradient(
+            circle,
+            rgba(255, 145, 20, 0.34) 0%,
+            rgba(255, 121, 0, 0.13) 36%,
+            transparent 70%
+        );
+
+    border-radius: 50%;
+}
+
+.real-header-image {
+    position: absolute;
+
+    display: block;
+
+    object-fit: contain;
+    user-select: none;
+
+    filter:
+        drop-shadow(
+            0 0 8px
+            rgba(82, 232, 132, 0.10)
+        );
+}
+
+.real-header-document {
+    top: 15px;
+    left: 8%;
+
+    width: 72px;
+    height: 84px;
+
+    opacity: 0.31;
+}
+
+.real-header-anguilla {
+    top: 42px;
+    left: 17%;
+
+    width: 57%;
+    max-width: 305px;
+    height: 102px;
+
+    opacity: 0.64;
+
+    filter:
+        drop-shadow(
+            0 0 10px
+            rgba(83, 235, 134, 0.18)
+        );
+}
+
+/* Revenue and bank are deliberately separated. */
+.real-header-revenue {
+    top: 14px;
+    right: 116px;
+
+    width: 72px;
+    height: 72px;
+
+    opacity: 0.26;
+
+    filter:
+        drop-shadow(
+            0 0 9px
+            rgba(255, 184, 63, 0.13)
+        );
+}
+
+.real-header-bank {
+    right: 7px;
+    bottom: -4px;
+
+    width: 98px;
+    height: 98px;
+
+    opacity: 0.32;
+
+    filter:
+        drop-shadow(
+            0 0 9px
+            rgba(255, 174, 58, 0.13)
+        );
+}
+
+
+/* ---------------------------------------------------------
+   V2: Assistant response entrance animation
+--------------------------------------------------------- */
+
+.message-group.assistant-animated {
+    animation:
+        assistantMessageIn
+        380ms
+        cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+@keyframes assistantMessageIn {
+    0% {
+        opacity: 0;
+
+        transform:
+            translateY(10px)
+            scale(0.988);
+    }
+
+    100% {
+        opacity: 1;
+
+        transform:
+            translateY(0)
+            scale(1);
+    }
+}
+
+
+/* ---------------------------------------------------------
+   V2: Slightly clearer bullet spacing
+--------------------------------------------------------- */
+
+.chat-list li {
+    margin: 0.34rem 0;
+    padding-left: 0.16rem;
+    line-height: 1.48;
+}
+
+
+/* ---------------------------------------------------------
+   V3: Help drawer zoom animation
+--------------------------------------------------------- */
+
+.help-drawer {
+    padding-right: 15px;
+    padding-left: 15px;
+
+    opacity: 0;
+
+    transform:
+        scale(0.78)
+        translateY(16px);
+
+    transform-origin: bottom left;
+
+    transition:
+        max-height 280ms cubic-bezier(0.22, 1, 0.36, 1),
+        padding 250ms cubic-bezier(0.22, 1, 0.36, 1),
+        opacity 180ms ease,
+        transform 280ms cubic-bezier(0.22, 1, 0.36, 1),
+        border-color 180ms ease;
+
+    will-change:
+        transform,
+        opacity,
+        max-height;
+}
+
+.help-drawer.open {
+    opacity: 1;
+
+    transform:
+        scale(1)
+        translateY(0);
+}
+
+.help-drawer .drawer-section {
+    opacity: 0;
+
+    transform:
+        translateY(8px)
+        scale(0.96);
+
+    transform-origin: bottom left;
+
+    transition:
+        opacity 150ms ease,
+        transform 230ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.help-drawer.open .drawer-section {
+    opacity: 1;
+
+    transform:
+        translateY(0)
+        scale(1);
+}
+
+.help-drawer.open .drawer-section:nth-child(2) {
+    transition-delay: 35ms;
+}
+
+
+/* ---------------------------------------------------------
+   Responsive overrides for the real header art and Help zoom
+--------------------------------------------------------- */
+
+@media (max-width: 560px) {
+    .real-header-art {
+        right: -31px;
+
+        width: 66%;
+        min-width: 235px;
+
+        opacity: 0.84;
+    }
+
+    .real-header-document {
+        top: 24px;
+        left: 6%;
+
+        width: 55px;
+        height: 65px;
+    }
+
+    .real-header-anguilla {
+        top: 50px;
+        left: 12%;
+
+        width: 61%;
+        height: 77px;
+    }
+
+    .real-header-revenue {
+        top: 18px;
+        right: 86px;
+
+        width: 51px;
+        height: 51px;
+    }
+
+    .real-header-bank {
+        right: 4px;
+        bottom: -2px;
+
+        width: 71px;
+        height: 71px;
+    }
+
+    .help-drawer {
+        padding-right: 10px;
+        padding-left: 10px;
+
+        transform:
+            scale(0.86)
+            translateY(12px);
+
+        transform-origin: bottom left;
+    }
+
+    .help-drawer.open {
+        transform:
+            scale(1)
+            translateY(0);
+    }
+}
+
+
+/* ---------------------------------------------------------
+   Reduced-motion accessibility
+--------------------------------------------------------- */
+
+@media (prefers-reduced-motion: reduce) {
+    .message-group.assistant-animated,
+    .help-drawer,
+    .help-drawer .drawer-section {
+        animation-duration: 1ms;
+        transition-duration: 1ms;
+        transition-delay: 0ms;
+    }
+}
+
+
+/* =====================================================================
+   V4 — UNREAD NOTIFICATIONS, INACTIVITY TIMEOUT AND SURVEY
+   Added onto the existing V2/V3 stylesheet.
+===================================================================== */
+
+
+/* ---------------------------------------------------------
+   Unread notification badge on the circular launcher
+--------------------------------------------------------- */
+
+.notification-badge {
+    position: absolute;
+    z-index: 6;
+    top: -9px;
+    right: -10px;
+
+    display: grid;
+    min-width: 29px;
+    height: 29px;
+    padding: 0 7px;
+
+    color: #ffffff;
+
+    background:
+        linear-gradient(
+            145deg,
+            #ff3b30,
+            #ff7200
+        );
+
+    border: 3px solid #ffffff;
+    border-radius: 999px;
+
+    box-shadow:
+        0 5px 15px rgba(226, 53, 0, 0.38),
+        0 0 0 3px rgba(255, 121, 0, 0.16);
+
+    font-size: 0.73rem;
+    font-weight: 900;
+    line-height: 1;
+
+    place-items: center;
+
+    transform-origin: center;
+
+    animation:
+        notificationHeartbeat
+        2.8s
+        infinite
+        ease-in-out,
+        notificationNudge
+        7s
+        infinite
+        ease-in-out;
+}
+
+.notification-badge[hidden] {
+    display: none;
+}
+
+.notification-badge.notification-badge-pop {
+    animation:
+        notificationPop
+        420ms
+        cubic-bezier(0.22, 1, 0.36, 1),
+        notificationHeartbeat
+        2.8s
+        420ms
+        infinite
+        ease-in-out,
+        notificationNudge
+        7s
+        420ms
+        infinite
+        ease-in-out;
+}
+
+@keyframes notificationPop {
+    0% {
+        opacity: 0;
+        transform: scale(0.35);
+    }
+
+    65% {
+        opacity: 1;
+        transform: scale(1.22);
+    }
+
+    100% {
+        opacity: 1;
+        transform: scale(1);
+    }
+}
+
+@keyframes notificationHeartbeat {
+    0%,
+    82%,
+    100% {
+        transform: scale(1);
+    }
+
+    88% {
+        transform: scale(1.14);
+    }
+
+    94% {
+        transform: scale(0.96);
+    }
+}
+
+@keyframes notificationNudge {
+    0%,
+    70%,
+    100% {
+        margin-right: 0;
+    }
+
+    75% {
+        margin-right: -4px;
+    }
+
+    79% {
+        margin-right: 4px;
+    }
+
+    83% {
+        margin-right: -3px;
+    }
+
+    87% {
+        margin-right: 0;
+    }
+}
+
+
+/* ---------------------------------------------------------
+   Inactivity countdown banner
+--------------------------------------------------------- */
+
+.session-timeout-banner {
+    display: grid;
+    margin: 5px 5px 18px 64px;
+    padding: 12px 13px;
+
+    grid-template-columns:
+        38px
+        minmax(0, 1fr)
+        auto;
+
+    align-items: center;
+    gap: 10px;
+
+    color: #4a2c15;
+
+    background:
+        linear-gradient(
+            145deg,
+            #fff7ed,
+            #fffdf9
+        );
+
+    border: 1px solid #ffc58f;
+    border-radius: 15px;
+
+    box-shadow:
+        0 8px 19px rgba(184, 80, 0, 0.09);
+
+    animation:
+        timeoutBannerIn
+        300ms
+        cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.timeout-banner-icon {
+    display: grid;
+    width: 38px;
+    height: 38px;
+
+    color: #ffffff;
+    background:
+        linear-gradient(
+            145deg,
+            #ff9417,
+            #f46c00
+        );
+
+    border-radius: 11px;
+
+    font-size: 1.1rem;
+
+    place-items: center;
+}
+
+.timeout-banner-copy strong,
+.timeout-banner-copy span {
+    display: block;
+}
+
+.timeout-banner-copy strong {
+    color: #a24400;
+
+    font-size: 0.78rem;
+}
+
+.timeout-banner-copy span {
+    margin-top: 2px;
+
+    color: #76543c;
+
+    font-size: 0.65rem;
+    line-height: 1.32;
+}
+
+.timeout-banner-copy b {
+    color: #d55300;
+
+    font-variant-numeric:
+        tabular-nums;
+}
+
+.timeout-still-here-button {
+    min-height: 38px;
+    padding: 8px 11px;
+
+    color: #ffffff;
+
+    background:
+        linear-gradient(
+            145deg,
+            #008957,
+            #00613a
+        );
+
+    border: 0;
+    border-radius: 10px;
+
+    font-size: 0.66rem;
+    font-weight: 850;
+
+    box-shadow:
+        0 5px 12px rgba(0, 105, 62, 0.16);
+}
+
+@keyframes timeoutBannerIn {
+    0% {
+        opacity: 0;
+
+        transform:
+            translateY(8px)
+            scale(0.97);
+    }
+
+    100% {
+        opacity: 1;
+
+        transform:
+            translateY(0)
+            scale(1);
+    }
+}
+
+
+/* ---------------------------------------------------------
+   End-of-session survey
+--------------------------------------------------------- */
+
+.session-survey {
+    margin: 7px 5px 22px 64px;
+    padding: 15px;
+
+    background:
+        linear-gradient(
+            145deg,
+            #ffffff,
+            #f7fcf9
+        );
+
+    border: 1px solid #acd6c0;
+    border-radius: 18px;
+
+    box-shadow:
+        0 10px 25px rgba(0, 82, 48, 0.11);
+
+    animation:
+        surveyCardIn
+        360ms
+        cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.survey-heading {
+    display: flex;
+
+    align-items: center;
+    gap: 10px;
+}
+
+.survey-heading-icon {
+    display: grid;
+    width: 42px;
+    height: 42px;
+    flex: 0 0 auto;
+
+    color: #ffffff;
+
+    background:
+        linear-gradient(
+            145deg,
+            #ff9a21,
+            #ff6d00
+        );
+
+    border-radius: 12px;
+
+    font-size: 1.3rem;
+
+    place-items: center;
+
+    box-shadow:
+        0 6px 14px rgba(255, 121, 0, 0.2);
+}
+
+.survey-heading strong,
+.survey-heading span {
+    display: block;
+}
+
+.survey-heading strong {
+    color: #005f39;
+
+    font-size: 0.92rem;
+}
+
+.survey-heading span {
+    margin-top: 2px;
+
+    color: #77867e;
+
+    font-size: 0.68rem;
+}
+
+.survey-stars {
+    display: flex;
+    margin: 14px 0 12px;
+
+    align-items: center;
+    gap: 7px;
+}
+
+.survey-star {
+    display: grid;
+    width: 41px;
+    height: 41px;
+    padding: 0;
+
+    color: #d5ddd8;
+    background: #ffffff;
+
+    border: 1px solid #d8e5de;
+    border-radius: 11px;
+
+    font-size: 1.45rem;
+
+    place-items: center;
+
+    transition:
+        color 130ms ease,
+        background 130ms ease,
+        border-color 130ms ease,
+        transform 130ms ease;
+}
+
+.survey-star:hover,
+.survey-star.selected {
+    color: #ff8a00;
+    background: #fff7ec;
+    border-color: #ffb770;
+
+    transform: translateY(-2px);
+}
+
+.survey-comment-label {
+    display: block;
+}
+
+.survey-comment-label > span {
+    display: block;
+    margin-bottom: 6px;
+
+    color: #426052;
+
+    font-size: 0.68rem;
+    font-weight: 800;
+}
+
+.survey-comment {
+    width: 100%;
+    min-height: 76px;
+    padding: 10px 11px;
+
+    resize: vertical;
+
+    color: #26312b;
+    background: #ffffff;
+
+    border: 1px solid #d0dfd7;
+    border-radius: 11px;
+    outline: none;
+
+    font: inherit;
+    font-size: 0.73rem;
+    line-height: 1.4;
+}
+
+.survey-comment:focus {
+    border-color: #008957;
+
+    box-shadow:
+        0 0 0 3px rgba(0, 137, 87, 0.09);
+}
+
+.survey-actions {
+    display: flex;
+    margin-top: 11px;
+
+    flex-wrap: wrap;
+    gap: 8px;
+}
+
+.survey-submit-button,
+.survey-new-chat-button {
+    min-height: 39px;
+    padding: 8px 13px;
+
+    color: #ffffff;
+
+    background:
+        linear-gradient(
+            145deg,
+            #008957,
+            #00613a
+        );
+
+    border: 0;
+    border-radius: 10px;
+
+    font-size: 0.69rem;
+    font-weight: 850;
+}
+
+.survey-submit-button:disabled {
+    cursor: not-allowed;
+    opacity: 0.45;
+}
+
+.survey-skip-button {
+    min-height: 39px;
+    padding: 8px 13px;
+
+    color: #77523b;
+    background: #fff7ed;
+
+    border: 1px solid #f3c79e;
+    border-radius: 10px;
+
+    font-size: 0.69rem;
+    font-weight: 800;
+}
+
+.survey-submit-status {
+    min-height: 16px;
+    margin: 9px 0 0;
+
+    color: #68786f;
+
+    font-size: 0.65rem;
+    line-height: 1.3;
+}
+
+.survey-hidden {
+    display: none;
+}
+
+@keyframes surveyCardIn {
+    0% {
+        opacity: 0;
+
+        transform:
+            translateY(12px)
+            scale(0.975);
+    }
+
+    100% {
+        opacity: 1;
+
+        transform:
+            translateY(0)
+            scale(1);
+    }
+}
+
+
+/* ---------------------------------------------------------
+   Disconnected state
+--------------------------------------------------------- */
+
+.chat-widget.session-ended
+.online-status {
+    color: #ffd49f;
+}
+
+.chat-widget.session-ended
+.online-status span {
+    background: #ff8b21;
+
+    box-shadow:
+        0 0 9px rgba(255, 139, 33, 0.62);
+}
+
+.chat-widget.session-ended
+.message-input-shell {
+    background: #f3f5f4;
+}
+
+.chat-widget.session-ended
+.chat-input,
+.chat-widget.session-ended
+#chat-input {
+    cursor: not-allowed;
+}
+
+
+/* ---------------------------------------------------------
+   Responsive timeout / survey layout
+--------------------------------------------------------- */
+
+@media (max-width: 560px) {
+    .notification-badge {
+        top: -7px;
+        right: -8px;
+
+        min-width: 27px;
+        height: 27px;
+
+        font-size: 0.69rem;
+    }
+
+    .session-timeout-banner {
+        margin-left: 51px;
+
+        grid-template-columns:
+            34px
+            minmax(0, 1fr);
+
+        gap: 8px;
+    }
+
+    .timeout-still-here-button {
+        grid-column: 1 / -1;
+
+        width: 100%;
+    }
+
+    .session-survey {
+        margin-left: 51px;
+        padding: 13px;
+    }
+}
+
+@media (max-width: 380px) {
+    .session-timeout-banner,
+    .session-survey {
+        margin-left: 0;
+    }
+
+    .survey-stars {
+        justify-content: space-between;
+    }
+
+    .survey-star {
+        width: 38px;
+        height: 38px;
+    }
+}
+
+
+/* ---------------------------------------------------------
+   Reduced motion
+--------------------------------------------------------- */
+
+@media (prefers-reduced-motion: reduce) {
+    .notification-badge,
+    .notification-badge.notification-badge-pop,
+    .session-timeout-banner,
+    .session-survey {
+        animation-duration: 1ms;
+        animation-iteration-count: 1;
+    }
+}
+
+
+
+/* =====================================================================
+   V5 — GEMINI VOICE, MICROPHONE DICTATION, VOICE MODE, GRAY TIMEOUT
+===================================================================== */
+
+/* Microphone replaces the former attachment icon. */
+.microphone-button {
+    position: relative;
+
+    border-radius: 50%;
+
+    transition:
+        color 150ms ease,
+        background 150ms ease,
+        transform 150ms ease,
+        box-shadow 150ms ease;
+}
+
+.microphone-button:hover {
+    color: #ffffff;
+    background: var(--green-700);
+
+    transform: scale(1.04);
+}
+
+.microphone-button.is-listening {
+    color: #ffffff;
+    background:
+        linear-gradient(
+            145deg,
+            #ff421f,
+            #ff7900
+        );
+
+    box-shadow:
+        0 0 0 5px rgba(255, 121, 0, 0.12),
+        0 0 18px rgba(255, 83, 18, 0.28);
+
+    animation:
+        microphoneListeningPulse
+        1.15s
+        infinite
+        ease-in-out;
+}
+
+.microphone-button.is-voice-mode {
+    color: #ffffff;
+    background:
+        linear-gradient(
+            145deg,
+            var(--green-500),
+            var(--green-700)
+        );
+
+    box-shadow:
+        0 0 0 4px rgba(17, 167, 103, 0.10);
+}
+
+@keyframes microphoneListeningPulse {
+    0%, 100% {
+        transform: scale(1);
+    }
+
+    50% {
+        transform: scale(1.10);
+    }
+}
+
+/* Voice Mode card remains directly left of Contact IRD in the 4-column grid. */
+.quick-action-card.voice-mode-card {
+    border-color: #b9deca;
+}
+
+.quick-action-card.voice-mode-card.is-active {
+    color: #ffffff;
+    background:
+        linear-gradient(
+            145deg,
+            #00965f,
+            #006d44
+        );
+
+    border-color: #007548;
+
+    box-shadow:
+        0 7px 17px rgba(0, 117, 72, 0.18);
+}
+
+.voice-mode-banner {
+    display: grid;
+    margin: 4px 5px 16px 64px;
+    padding: 11px 12px;
+
+    grid-template-columns:
+        39px
+        minmax(0, 1fr)
+        auto;
+
+    align-items: center;
+    gap: 10px;
+
+    color: #ffffff;
+
+    background:
+        linear-gradient(
+            135deg,
+            #00794b,
+            #005b37
+        );
+
+    border-radius: 15px;
+
+    box-shadow:
+        0 8px 20px rgba(0, 91, 55, 0.17);
+
+    animation:
+        voiceModeBannerIn
+        260ms
+        cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.voice-mode-orb {
+    display: grid;
+    width: 39px;
+    height: 39px;
+
+    color: #ffffff;
+    background: rgba(255, 255, 255, 0.14);
+
+    border: 1px solid rgba(255, 255, 255, 0.18);
+    border-radius: 50%;
+
+    place-items: center;
+
+    animation:
+        voiceModeOrbPulse
+        1.45s
+        infinite
+        ease-in-out;
+}
+
+.voice-mode-orb svg {
+    width: 21px;
+    height: 21px;
+
+    fill: none;
+    stroke: currentColor;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+    stroke-width: 1.9;
+}
+
+.voice-mode-copy strong,
+.voice-mode-copy span {
+    display: block;
+}
+
+.voice-mode-copy strong {
+    font-size: 0.77rem;
+}
+
+.voice-mode-copy span {
+    margin-top: 2px;
+
+    color: rgba(255, 255, 255, 0.82);
+
+    font-size: 0.64rem;
+    line-height: 1.3;
+}
+
+.voice-mode-end-button {
+    min-height: 35px;
+    padding: 7px 10px;
+
+    color: #005f39;
+    background: #ffffff;
+
+    border: 0;
+    border-radius: 9px;
+
+    font-size: 0.64rem;
+    font-weight: 850;
+}
+
+.chat-widget.voice-mode-active
+.message-input-shell {
+    border-color: #75c39c;
+
+    box-shadow:
+        0 0 0 3px rgba(0, 137, 87, 0.08);
+}
+
+@keyframes voiceModeBannerIn {
+    from {
+        opacity: 0;
+        transform: translateY(7px) scale(0.98);
+    }
+
+    to {
+        opacity: 1;
+        transform: translateY(0) scale(1);
+    }
+}
+
+@keyframes voiceModeOrbPulse {
+    0%, 100% {
+        transform: scale(0.94);
+        opacity: 0.76;
+    }
+
+    50% {
+        transform: scale(1.06);
+        opacity: 1;
+    }
+}
+
+/* ---------------------------------------------------------
+   Timeout state: the entire assistant visibly disconnects
+--------------------------------------------------------- */
+
+.aida-session-ended .chat-widget,
+.chat-widget.session-ended {
+    background: #eceeed;
+    border-color: #aeb4b1;
+}
+
+.chat-widget.session-ended .chat-header {
+    color: #f4f5f4;
+
+    background:
+        linear-gradient(
+            135deg,
+            #767c79,
+            #565b58
+        );
+}
+
+.chat-widget.session-ended .real-header-art,
+.chat-widget.session-ended .header-art,
+.chat-widget.session-ended .header-avatar,
+.chat-widget.session-ended .message-avatar {
+    filter: grayscale(1);
+}
+
+.chat-widget.session-ended .avatar-neon-ring,
+.chat-widget.session-ended .launcher-glow {
+    box-shadow: none;
+}
+
+.chat-widget.session-ended .online-status {
+    color: #d7d9d8;
+}
+
+.chat-widget.session-ended .online-status span {
+    background: #a1a6a3;
+    box-shadow: none;
+}
+
+.chat-widget.session-ended .chat-body {
+    background: #eef0ef;
+}
+
+.chat-widget.session-ended .assistant-message,
+.chat-widget.session-ended .user-message {
+    color: #555b58;
+    background: #dfe2e0;
+    border-color: #c3c8c5;
+    box-shadow: none;
+}
+
+/* Once disconnected, hide normal controls. Only feedback/new-chat controls remain. */
+.chat-widget.session-ended .header-controls,
+.chat-widget.session-ended .chat-footer,
+.chat-widget.session-ended .help-drawer,
+.chat-widget.session-ended .message-tools,
+.chat-widget.session-ended .form-resource-actions,
+.chat-widget.session-ended .voice-mode-banner,
+.chat-widget.session-ended .session-timeout-banner {
+    display: none !important;
+}
+
+.chat-widget.session-ended .session-survey,
+.chat-widget.session-ended .session-survey button,
+.chat-widget.session-ended .session-survey textarea {
+    filter: none;
+}
+
+/* The minimised A.I.D.A. launcher also turns gray after timeout. */
+body.aida-session-ended .chat-launcher {
+    background: #d9dcda;
+    border-color: #7f8582;
+
+    filter: grayscale(1);
+
+    box-shadow:
+        0 18px 42px rgba(49, 54, 51, 0.24);
+}
+
+body.aida-session-ended .chat-launcher .launcher-glow {
+    border-color: rgba(120, 126, 122, 0.55);
+    box-shadow: none;
+    animation: none;
+}
+
+body.aida-session-ended .chat-launcher .launcher-status {
+    background: #8e9490;
+}
+
+/* Keep the unread counter vivid even though the launcher itself is gray. */
+body.aida-session-ended
+.chat-launcher
+.notification-badge {
+    filter: none;
+}
+
+@media (max-width: 560px) {
+    .voice-mode-banner {
+        margin-left: 51px;
+
+        grid-template-columns:
+            36px
+            minmax(0, 1fr)
+            auto;
+    }
+}
+
+@media (max-width: 380px) {
+    .voice-mode-banner {
+        margin-left: 0;
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .microphone-button.is-listening,
+    .voice-mode-orb,
+    .voice-mode-banner {
+        animation-duration: 1ms;
+        animation-iteration-count: 1;
     }
 }

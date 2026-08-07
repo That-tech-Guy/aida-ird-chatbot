@@ -46,7 +46,7 @@
       "business no longer active"
     ],
     "official_url": "https://ird.gov.ai/Content/documents/Application%20for%20Closure%20of%20Business%202021%20-%20Revised16041126.pdf",
-    "fillable_filename": "closure-of-business-fillable.pdf",
+    "fillable_filename": "Application_for_Closure_of_Business_Fillable.pdf",
     "featured": false
   },
   {
@@ -63,7 +63,7 @@
       "special event alcohol"
     ],
     "official_url": "https://ird.gov.ai/Content/documents/APPLICATION%20FOR%20SPECIAL%20LIQUOR%20LICENCE.pdf",
-    "fillable_filename": "special-liquor-licence-fillable.pdf",
+    "fillable_filename": "Application_for_Special_Liquor_Licence_Fillable.pdf",
     "featured": true
   },
   {
@@ -79,7 +79,7 @@
       "clearance certificate"
     ],
     "official_url": "https://ird.gov.ai/Content/documents/Application%20for%20Certificate%20Of%20Good%20Standing.pdf",
-    "fillable_filename": "certificate-good-standing-fillable.pdf",
+    "fillable_filename": "Application_for_Certificate_of_Good_Standing_Fillable.pdf",
     "featured": true
   },
   {
@@ -95,7 +95,7 @@
       "driver license application"
     ],
     "official_url": "https://ird.gov.ai/Content/documents/Application%20for%20a%20new%20Driver%27s%20Licence.pdf",
-    "fillable_filename": "new-driver-licence-fillable.pdf",
+    "fillable_filename": "Application_for_a_New_Drivers_Licence_Fillable.pdf",
     "featured": false
   },
   {
@@ -111,7 +111,7 @@
       "driver license renewal"
     ],
     "official_url": "https://ird.gov.ai/Content/documents/Renewal%20of%20Drivers%20Licence%20Final%20%202019%20-%20Revised16041141.pdf",
-    "fillable_filename": "driver-licence-renewal-fillable.pdf",
+    "fillable_filename": "Renewal_of_Drivers_Licence_Fillable.pdf",
     "featured": true
   },
   {
@@ -128,7 +128,7 @@
       "personal tin"
     ],
     "official_url": "https://ird.gov.ai/Content/documents/F1%20-%20REGISTRATION%20FOR%20AN%20INDIVIDUAL.pdf",
-    "fillable_filename": "f1-individual-registration-fillable.pdf",
+    "fillable_filename": "F1_Registration_for_an_Individual_Fillable.pdf",
     "featured": true
   },
   {
@@ -145,7 +145,7 @@
       "register sole proprietorship"
     ],
     "official_url": "https://ird.gov.ai/Content/documents/F2%20-%20REGISTRATION%20FOR%20AN%20INDIVIDUAL%20ENTERPRISE.pdf",
-    "fillable_filename": "f2-individual-enterprise-fillable.pdf",
+    "fillable_filename": "F2_Registration_for_an_Individual_Enterprise_Fillable.pdf",
     "featured": true
   },
   {
@@ -162,7 +162,7 @@
       "register company with ird"
     ],
     "official_url": "https://ird.gov.ai/Content/documents/F3%20-%20REGISTRATION%20FOR%20A%20NON-INDIVIDUAL%20ENTERPRISE.pdf",
-    "fillable_filename": "f3-non-individual-enterprise-fillable.pdf",
+    "fillable_filename": "F3_Registration_for_a_Non_Individual_Enterprise_Fillable.pdf",
     "featured": true
   },
   {
@@ -179,7 +179,7 @@
       "monthly gst return"
     ],
     "official_url": "https://ird.gov.ai/Content/documents/General%20Services%20Tax%20Return%20Form.pdf",
-    "fillable_filename": "general-services-tax-return-fillable.pdf",
+    "fillable_filename": "General_Services_Tax_Return_Form_Fillable.pdf",
     "featured": true
   },
   {
@@ -195,7 +195,7 @@
       "gst deregistration"
     ],
     "official_url": "https://ird.gov.ai/Content/documents/GST%20Application%20of%20Cancellation%20GST.pdf",
-    "fillable_filename": "gst-cancellation-fillable.pdf",
+    "fillable_filename": "GST_Application_for_Cancellation_Fillable (2).pdf",
     "featured": false
   },
   {
@@ -211,7 +211,7 @@
       "appeal property valuation"
     ],
     "official_url": "https://ird.gov.ai/Content/documents/Property%20Objection%20Form27080914.pdf",
-    "fillable_filename": "property-valuation-objection-fillable.pdf",
+    "fillable_filename": "Property_Objection_Form_Fillable.pdf",
     "featured": true
   },
   {
@@ -226,7 +226,7 @@
       "new vehicle registration"
     ],
     "official_url": "https://ird.gov.ai/Content/documents/Vehicle%20Registration%20Form.pdf",
-    "fillable_filename": "vehicle-registration-fillable.pdf",
+    "fillable_filename": "Vehicle_Registration_Form_Fillable.pdf",
     "featured": true
   },
   {
@@ -242,7 +242,7 @@
       "vehicle ownership transfer"
     ],
     "official_url": "https://ird.gov.ai/Content/documents/Vehicle%20Transfer%20Form.pdf",
-    "fillable_filename": "vehicle-transfer-fillable.pdf",
+    "fillable_filename": "Vehicle_Transfer_Form_Fillable.pdf",
     "featured": true
   },
   {
@@ -257,7 +257,7 @@
       "employer usl return"
     ],
     "official_url": "https://ird.gov.ai/Content/documents/USL%20-%20Employee%20Form%202021.pdf",
-    "fillable_filename": "usl-employee-fillable.pdf",
+    "fillable_filename": "USL_Employee_Form_2021_Fillable.pdf",
     "featured": false
   },
   {
@@ -273,6 +273,87 @@
     ],
     "official_url": "https://ird.gov.ai/Content/documents/USL%20-%20Self%20-%20Employed%20Form%202021.pdf",
     "fillable_filename": "usl-self-employed-fillable.pdf",
+    "featured": false
+  },
+  {
+    "id": "accommodation-tax-register",
+    "title": "Accommodation Tax Register",
+    "category": "Accommodation Tax",
+    "description": "Register used for accommodation-tax room and guest records.",
+    "icon": "🏨",
+    "keywords": [
+      "accommodation tax register",
+      "hotel tax register",
+      "room tax register",
+      "accommodation register"
+    ],
+    "official_url": "https://ird.gov.ai/Content/documents/ACCOMMODATION%20TAX%20REGISTER.pdf",
+    "fillable_filename": "Accommodation_Tax_Register_Fillable.pdf",
+    "featured": true
+  },
+  {
+    "id": "credit-card-authorisation",
+    "title": "One Time Credit Card Payment Authorization Form",
+    "category": "Payments",
+    "description": "Authorization form for a single credit-card payment to IRD.",
+    "icon": "💳",
+    "keywords": [
+      "credit card authorisation",
+      "credit card authorization",
+      "one time credit card payment",
+      "pay by credit card"
+    ],
+    "official_url": "https://ird.gov.ai/Content/documents/Auth-Form-CC-One-Time-Payment%20REVISED%282%2916041126.pdf",
+    "fillable_filename": "Auth-Form-CC-One-Time-Payment_REVISED_Fillable.pdf",
+    "fillable_filenames": [
+      "One_Time_Credit_Card_Payment_Authorization_Fillable.pdf"
+    ],
+    "featured": true
+  },
+  {
+    "id": "gst-deregistration",
+    "title": "Goods and Services Tax Deregistration Form",
+    "category": "Goods and Services Tax",
+    "description": "Form used for legacy Goods and Services Tax deregistration.",
+    "icon": "🧾",
+    "keywords": [
+      "goods and services tax deregistration",
+      "gst deregistration form",
+      "deregister from gst"
+    ],
+    "official_url": "https://ird.gov.ai/Forms",
+    "official_button_label": "Official IRD Forms Page",
+    "fillable_filename": "Goods_and_Services_Tax_Deregistration_Form_Fillable.pdf",
+    "featured": false
+  },
+  {
+    "id": "gst-return-legacy",
+    "title": "GST Return Form",
+    "category": "Goods and Services Tax",
+    "description": "Legacy Goods and Services Tax return form.",
+    "icon": "🧾",
+    "keywords": [
+      "gst return form",
+      "goods and services tax return"
+    ],
+    "official_url": "https://ird.gov.ai/Forms",
+    "official_button_label": "Official IRD Forms Page",
+    "fillable_filename": "GST_Return_Form_Fillable.pdf",
+    "featured": false
+  },
+  {
+    "id": "temporary-driver-licence-register",
+    "title": "Temporary Driver's Licence Register",
+    "category": "Driver's Licence",
+    "description": "Register associated with temporary driver's licences.",
+    "icon": "🚘",
+    "keywords": [
+      "temporary driver licence register",
+      "temporary driver's licence",
+      "temporary drivers licence"
+    ],
+    "official_url": "https://ird.gov.ai/Content/documents/Temporary%20Driver%27s%20Licence%20Register.pdf",
+    "fillable_filename": "Temporary_Drivers_Licence_Register_Fillable.pdf",
     "featured": false
   }
 ]

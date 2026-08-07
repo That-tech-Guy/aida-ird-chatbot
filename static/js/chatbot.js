@@ -8,6 +8,7 @@ const chatForm = document.getElementById("chat-form");
 const chatInput = document.getElementById("chat-input");
 const chatMessages = document.getElementById("chat-messages");
 const attachmentButton = document.querySelector(".attachment-button");
+const microphoneButton = document.getElementById("microphone-button");
 const sendButton = document.getElementById("send-button");
 
 const helpButton = document.getElementById("help-button");
@@ -20,14 +21,42 @@ const popularQuestionsContainer = document.getElementById(
 
 const avatarPath = "/static/images/aida_logo.jpeg";
 
+const notificationBadge = document.getElementById(
+    "notification-badge"
+);
+
+const INACTIVITY_WARNING_MS = 30 * 1000;
+const DISCONNECT_COUNTDOWN_MS = 60 * 1000;
+
 let waitingForReply = false;
 let conversationHistory = [];
 let speechStatus = null;
+
+let unreadAssistantMessages = 0;
+
+let sessionStarted = false;
+let sessionEnded = false;
+let stillTherePromptActive = false;
+let surveyShown = false;
+
+let inactivityTimer = null;
+let disconnectTimer = null;
+let disconnectCountdownInterval = null;
+let disconnectDeadline = null;
+
+let sessionId = createSessionId();
 
 let activeAudio = null;
 let activeSpeechButton = null;
 
 const speechCache = new Map();
+
+let voiceModeActive = false;
+let voiceModeSpeaking = false;
+let speechRecognition = null;
+let speechRecognitionActive = false;
+let recognitionAutoSubmit = false;
+let suppressRecognitionRestart = false;
 
 
 // ---------------------------------------------------------
@@ -50,38 +79,37 @@ const quickActions = [
             "How do I license or renew a vehicle?"
     },
     {
-        label: "Property Tax",
-        tone: "green",
-        icon: "home",
-        question:
-            "How do I pay Property Tax and when is it due?"
-    },
-    {
         label: "Liquor Licence",
-        tone: "orange",
+        tone: "green",
         icon: "bottle",
         question:
             "How do I apply for or renew a liquor licence?"
     },
     {
         label: "Register a Business",
-        tone: "green",
+        tone: "orange",
         icon: "briefcase",
         question:
             "How do I register a business and obtain a business licence?"
     },
     {
         label: "Download Forms",
-        tone: "orange",
+        tone: "green",
         icon: "download",
         action: "forms"
     },
     {
         label: "Pay Taxes",
-        tone: "green",
+        tone: "orange",
         icon: "card",
         question:
             "What payment methods can I use to pay taxes or fees?"
+    },
+    {
+        label: "Voice Mode",
+        tone: "green",
+        icon: "microphone",
+        action: "voice"
     },
     {
         label: "Contact IRD",
@@ -190,6 +218,14 @@ function iconSvg(iconName) {
             </svg>
         `,
 
+        microphone: `
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+                <rect x="9" y="3" width="6" height="11" rx="3" />
+                <path d="M6 11a6 6 0 0 0 12 0" />
+                <path d="M12 17v4M9 21h6" />
+            </svg>
+        `,
+
         speaker: `
             <svg viewBox="0 0 24 24" aria-hidden="true">
                 <path d="M5 10v4h4l5 4V6l-5 4H5Z" />
@@ -209,6 +245,1213 @@ function iconSvg(iconName) {
 
 
 // ---------------------------------------------------------
+// Unread notifications and inactivity session management
+// ---------------------------------------------------------
+
+function createSessionId() {
+    if (
+        window.crypto &&
+        typeof window.crypto.randomUUID === "function"
+    ) {
+        return window.crypto.randomUUID();
+    }
+
+    return (
+        "aida-" +
+        Date.now().toString(36) +
+        "-" +
+        Math.random().toString(36).slice(2)
+    );
+}
+
+
+function isChatActivelyVisible() {
+    return (
+        chatWidget.classList.contains("open") &&
+        !document.hidden
+    );
+}
+
+
+function renderUnreadBadge() {
+    if (!notificationBadge) {
+        return;
+    }
+
+    if (unreadAssistantMessages <= 0) {
+        notificationBadge.hidden = true;
+        notificationBadge.textContent = "0";
+
+        notificationBadge.setAttribute(
+            "aria-label",
+            "No unread A.I.D.A. messages"
+        );
+
+        return;
+    }
+
+    notificationBadge.hidden = false;
+
+    notificationBadge.textContent = (
+        unreadAssistantMessages > 99
+            ? "99+"
+            : String(unreadAssistantMessages)
+    );
+
+    notificationBadge.setAttribute(
+        "aria-label",
+        (
+            unreadAssistantMessages === 1
+                ? "1 unread A.I.D.A. message"
+                : `${unreadAssistantMessages} unread A.I.D.A. messages`
+        )
+    );
+
+    // Restart the pop animation whenever a new message is added.
+    notificationBadge.classList.remove(
+        "notification-badge-pop"
+    );
+
+    void notificationBadge.offsetWidth;
+
+    notificationBadge.classList.add(
+        "notification-badge-pop"
+    );
+}
+
+
+function registerAssistantNotification() {
+    if (isChatActivelyVisible()) {
+        return;
+    }
+
+    unreadAssistantMessages += 1;
+    renderUnreadBadge();
+}
+
+
+function clearUnreadNotifications() {
+    unreadAssistantMessages = 0;
+    renderUnreadBadge();
+}
+
+
+function clearInactivityTimer() {
+    if (inactivityTimer) {
+        window.clearTimeout(inactivityTimer);
+        inactivityTimer = null;
+    }
+}
+
+
+function clearDisconnectCountdown() {
+    if (disconnectTimer) {
+        window.clearTimeout(disconnectTimer);
+        disconnectTimer = null;
+    }
+
+    if (disconnectCountdownInterval) {
+        window.clearInterval(
+            disconnectCountdownInterval
+        );
+
+        disconnectCountdownInterval = null;
+    }
+
+    disconnectDeadline = null;
+}
+
+
+function removeTimeoutBanner() {
+    document.getElementById(
+        "session-timeout-banner"
+    )?.remove();
+}
+
+
+function formatCountdown(milliseconds) {
+    const totalSeconds = Math.max(
+        0,
+        Math.ceil(milliseconds / 1000)
+    );
+
+    const minutes = Math.floor(
+        totalSeconds / 60
+    );
+
+    const seconds = totalSeconds % 60;
+
+    return (
+        `${minutes}:` +
+        String(seconds).padStart(2, "0")
+    );
+}
+
+
+function scheduleInactivityWarning() {
+    clearInactivityTimer();
+
+    if (
+        !sessionStarted ||
+        sessionEnded ||
+        stillTherePromptActive
+    ) {
+        return;
+    }
+
+    inactivityTimer = window.setTimeout(
+        () => {
+            beginStillTherePrompt();
+        },
+        INACTIVITY_WARNING_MS
+    );
+}
+
+
+function registerUserActivity() {
+    if (
+        !sessionStarted ||
+        sessionEnded
+    ) {
+        return;
+    }
+
+    if (stillTherePromptActive) {
+        resumeSessionFromTimeout();
+        return;
+    }
+
+    scheduleInactivityWarning();
+}
+
+
+function createTimeoutBanner() {
+    removeTimeoutBanner();
+
+    const banner = document.createElement(
+        "section"
+    );
+
+    banner.className = "session-timeout-banner";
+    banner.id = "session-timeout-banner";
+
+    banner.innerHTML = `
+        <div class="timeout-banner-icon" aria-hidden="true">
+            ⏱
+        </div>
+
+        <div class="timeout-banner-copy">
+            <strong>Still with me?</strong>
+            <span>
+                This chat will disconnect in
+                <b id="session-countdown-time">1:00</b>
+                without activity.
+            </span>
+        </div>
+
+        <button
+            class="timeout-still-here-button"
+            id="timeout-still-here-button"
+            type="button"
+        >
+            I’m still here
+        </button>
+    `;
+
+    banner
+        .querySelector(
+            "#timeout-still-here-button"
+        )
+        .addEventListener(
+            "click",
+            resumeSessionFromTimeout
+        );
+
+    chatMessages.appendChild(banner);
+
+    scrollConversationToBottom();
+
+    return banner;
+}
+
+
+function updateDisconnectCountdown() {
+    if (!disconnectDeadline) {
+        return;
+    }
+
+    const remaining = (
+        disconnectDeadline - Date.now()
+    );
+
+    const countdownElement = document.getElementById(
+        "session-countdown-time"
+    );
+
+    if (countdownElement) {
+        countdownElement.textContent =
+            formatCountdown(remaining);
+    }
+
+    if (remaining <= 0) {
+        disconnectSessionForInactivity();
+    }
+}
+
+
+function beginStillTherePrompt() {
+    if (
+        !sessionStarted ||
+        sessionEnded ||
+        stillTherePromptActive
+    ) {
+        return;
+    }
+
+    // Do not interrupt an AI response that is still being generated.
+    if (waitingForReply) {
+        scheduleInactivityWarning();
+        return;
+    }
+
+    stillTherePromptActive = true;
+
+    if (voiceModeActive) {
+        stopSpeechRecognition();
+        updateVoiceModeStatus(
+            "Paused — waiting for you to confirm you’re still here."
+        );
+    }
+
+    addAssistantMessage(
+        "**Are you still there?**\n" +
+        "I haven’t seen any activity for a little while. " +
+        "This chat will close in **1 minute** unless you continue."
+    );
+
+    createTimeoutBanner();
+
+    disconnectDeadline = (
+        Date.now() +
+        DISCONNECT_COUNTDOWN_MS
+    );
+
+    updateDisconnectCountdown();
+
+    disconnectCountdownInterval =
+        window.setInterval(
+            updateDisconnectCountdown,
+            1000
+        );
+
+    disconnectTimer = window.setTimeout(
+        disconnectSessionForInactivity,
+        DISCONNECT_COUNTDOWN_MS
+    );
+}
+
+
+function resumeSessionFromTimeout() {
+    if (
+        sessionEnded ||
+        !stillTherePromptActive
+    ) {
+        return;
+    }
+
+    stillTherePromptActive = false;
+
+    clearDisconnectCountdown();
+    removeTimeoutBanner();
+
+    scheduleInactivityWarning();
+
+    if (voiceModeActive) {
+        window.setTimeout(
+            () => {
+                startSpeechRecognition(true);
+            },
+            400
+        );
+    }
+
+    chatInput.disabled = false;
+    sendButton.disabled = false;
+
+    chatInput.focus();
+}
+
+
+function setConversationControlsDisabled(disabled) {
+    chatInput.disabled = disabled;
+    sendButton.disabled = disabled;
+
+    if (helpButton) {
+        helpButton.disabled = disabled;
+    }
+
+    if (attachmentButton) {
+        attachmentButton.disabled = disabled;
+    }
+}
+
+
+function setSessionEndedAppearance(ended) {
+    chatWidget.classList.toggle(
+        "session-ended",
+        ended
+    );
+
+    document.body.classList.toggle(
+        "aida-session-ended",
+        ended
+    );
+
+    if (ended) {
+        chatInput.placeholder =
+            "Chat ended — complete the survey below";
+    } else {
+        chatInput.placeholder =
+            "Type your question here...";
+    }
+}
+
+
+function disconnectSessionForInactivity() {
+    if (sessionEnded) {
+        return;
+    }
+
+    sessionEnded = true;
+    stillTherePromptActive = false;
+
+    clearInactivityTimer();
+    clearDisconnectCountdown();
+    removeTimeoutBanner();
+
+    closeHelpDrawer();
+    deactivateVoiceMode({
+        silent: true
+    });
+    stopActiveSpeech();
+
+    setWaitingState(false);
+    setConversationControlsDisabled(true);
+    setSessionEndedAppearance(true);
+
+    addAssistantMessage(
+        "**Chat ended due to inactivity.**\n" +
+        "For your privacy, this session has been disconnected. " +
+        "Please tell us how well A.I.D.A. performed before starting a new chat."
+    );
+
+    showSessionSurvey();
+}
+
+
+function createSurveyStar(rating) {
+    const button = document.createElement(
+        "button"
+    );
+
+    button.className = "survey-star";
+    button.type = "button";
+    button.dataset.rating = String(rating);
+
+    button.setAttribute(
+        "aria-label",
+        `${rating} out of 5`
+    );
+
+    button.textContent = "★";
+
+    return button;
+}
+
+
+function updateSurveyStars(
+    starButtons,
+    selectedRating
+) {
+    starButtons.forEach((button) => {
+        const rating = Number(
+            button.dataset.rating
+        );
+
+        button.classList.toggle(
+            "selected",
+            rating <= selectedRating
+        );
+    });
+}
+
+
+async function submitSessionSurvey(
+    rating,
+    comment,
+    surveyElement
+) {
+    const submitButton = surveyElement.querySelector(
+        ".survey-submit-button"
+    );
+
+    const statusElement = surveyElement.querySelector(
+        ".survey-submit-status"
+    );
+
+    submitButton.disabled = true;
+    statusElement.textContent = "Saving feedback…";
+
+    try {
+        const response = await fetch(
+            "/api/survey",
+            {
+                method: "POST",
+                headers: {
+                    "Content-Type":
+                        "application/json"
+                },
+                body: JSON.stringify(
+                    {
+                        session_id: sessionId,
+                        rating,
+                        comment,
+                        ended_reason:
+                            "inactivity_timeout",
+                        conversation_messages:
+                            conversationHistory.length
+                    }
+                )
+            }
+        );
+
+        const payload = await response.json();
+
+        if (!response.ok) {
+            throw new Error(
+                payload.error ||
+                "Feedback could not be saved."
+            );
+        }
+
+        statusElement.textContent =
+            "Thank you — your feedback was saved.";
+
+    } catch (error) {
+        statusElement.textContent = (
+            "Thank you. The survey could not be " +
+            "saved to the server, but you can still start a new chat."
+        );
+
+    } finally {
+        showNewChatButton(surveyElement);
+    }
+}
+
+
+function showNewChatButton(surveyElement) {
+    surveyElement
+        .querySelector(
+            ".survey-submit-button"
+        )
+        ?.classList.add("survey-hidden");
+
+    let newChatButton = surveyElement.querySelector(
+        ".survey-new-chat-button"
+    );
+
+    if (!newChatButton) {
+        newChatButton = document.createElement(
+            "button"
+        );
+
+        newChatButton.className =
+            "survey-new-chat-button";
+
+        newChatButton.type = "button";
+        newChatButton.textContent =
+            "Start a new chat";
+
+        newChatButton.addEventListener(
+            "click",
+            startNewSession
+        );
+
+        surveyElement
+            .querySelector(
+                ".survey-actions"
+            )
+            .appendChild(
+                newChatButton
+            );
+    }
+}
+
+
+function showSessionSurvey() {
+    if (surveyShown) {
+        return;
+    }
+
+    surveyShown = true;
+
+    const survey = document.createElement(
+        "section"
+    );
+
+    survey.className = "session-survey";
+    survey.id = "session-survey";
+
+    survey.innerHTML = `
+        <div class="survey-heading">
+            <span class="survey-heading-icon" aria-hidden="true">
+                ★
+            </span>
+
+            <div>
+                <strong>How did A.I.D.A. do?</strong>
+                <span>
+                    Rate the help you received in this chat.
+                </span>
+            </div>
+        </div>
+
+        <div
+            class="survey-stars"
+            role="group"
+            aria-label="Rate A.I.D.A. from 1 to 5"
+        ></div>
+
+        <label class="survey-comment-label">
+            <span>Optional comment</span>
+
+            <textarea
+                class="survey-comment"
+                maxlength="1000"
+                rows="3"
+                placeholder="What worked well or could be improved?"
+            ></textarea>
+        </label>
+
+        <div class="survey-actions">
+            <button
+                class="survey-submit-button"
+                type="button"
+                disabled
+            >
+                Submit feedback
+            </button>
+
+            <button
+                class="survey-new-chat-button"
+                type="button"
+            >
+                Start a new chat
+            </button>
+        </div>
+
+        <p
+            class="survey-submit-status"
+            aria-live="polite"
+        ></p>
+    `;
+
+    const starsContainer = survey.querySelector(
+        ".survey-stars"
+    );
+
+    const starButtons = [];
+    let selectedRating = 0;
+
+    for (let rating = 1; rating <= 5; rating += 1) {
+        const star = createSurveyStar(rating);
+
+        star.addEventListener(
+            "click",
+            () => {
+                selectedRating = rating;
+
+                updateSurveyStars(
+                    starButtons,
+                    selectedRating
+                );
+
+                survey.querySelector(
+                    ".survey-submit-button"
+                ).disabled = false;
+            }
+        );
+
+        starButtons.push(star);
+        starsContainer.appendChild(star);
+    }
+
+    survey
+        .querySelector(
+            ".survey-submit-button"
+        )
+        .addEventListener(
+            "click",
+            () => {
+                const comment = survey
+                    .querySelector(
+                        ".survey-comment"
+                    )
+                    .value
+                    .trim();
+
+                submitSessionSurvey(
+                    selectedRating,
+                    comment,
+                    survey
+                );
+            }
+        );
+
+    survey
+        .querySelector(
+            ".survey-new-chat-button"
+        )
+        .addEventListener(
+            "click",
+            startNewSession
+        );
+
+    chatMessages.appendChild(survey);
+
+    scrollConversationToBottom();
+}
+
+
+function startNewSession() {
+    deactivateVoiceMode({
+        silent: true
+    });
+
+    clearInactivityTimer();
+    clearDisconnectCountdown();
+    removeTimeoutBanner();
+
+    sessionId = createSessionId();
+
+    sessionEnded = false;
+    surveyShown = false;
+    stillTherePromptActive = false;
+    sessionStarted = true;
+
+    setConversationControlsDisabled(false);
+    setSessionEndedAppearance(false);
+
+    clearUnreadNotifications();
+
+    loadInitialConversation();
+
+    scheduleInactivityWarning();
+
+    chatInput.focus();
+}
+
+
+// ---------------------------------------------------------
+// Microphone dictation and conversational Voice Mode
+// ---------------------------------------------------------
+
+function getSpeechRecognitionConstructor() {
+    return (
+        window.SpeechRecognition ||
+        window.webkitSpeechRecognition ||
+        null
+    );
+}
+
+
+function speechRecognitionIsSupported() {
+    return Boolean(
+        getSpeechRecognitionConstructor()
+    );
+}
+
+
+function setMicrophoneState(state) {
+    if (!microphoneButton) {
+        return;
+    }
+
+    microphoneButton.classList.remove(
+        "is-listening",
+        "is-voice-mode"
+    );
+
+    if (state === "listening") {
+        microphoneButton.classList.add(
+            "is-listening"
+        );
+
+        microphoneButton.title =
+            "Listening — tap to stop";
+
+        microphoneButton.setAttribute(
+            "aria-label",
+            "Stop listening"
+        );
+
+        return;
+    }
+
+    if (voiceModeActive) {
+        microphoneButton.classList.add(
+            "is-voice-mode"
+        );
+
+        microphoneButton.title =
+            "Voice Mode is on — tap to end";
+
+        microphoneButton.setAttribute(
+            "aria-label",
+            "End Voice Mode"
+        );
+
+        return;
+    }
+
+    microphoneButton.title =
+        "Speak your question";
+
+    microphoneButton.setAttribute(
+        "aria-label",
+        "Speak your question"
+    );
+}
+
+
+function removeVoiceModeBanner() {
+    document.getElementById(
+        "voice-mode-banner"
+    )?.remove();
+}
+
+
+function renderVoiceModeBanner(statusText = "Listening…") {
+    removeVoiceModeBanner();
+
+    if (!voiceModeActive || sessionEnded) {
+        return;
+    }
+
+    const banner = document.createElement(
+        "section"
+    );
+
+    banner.id = "voice-mode-banner";
+    banner.className = "voice-mode-banner";
+
+    banner.innerHTML = `
+        <span class="voice-mode-orb" aria-hidden="true">
+            ${iconSvg("microphone")}
+        </span>
+
+        <div class="voice-mode-copy">
+            <strong>Voice Mode</strong>
+            <span id="voice-mode-status-text"></span>
+        </div>
+
+        <button
+            class="voice-mode-end-button"
+            type="button"
+        >
+            End
+        </button>
+    `;
+
+    banner.querySelector(
+        "#voice-mode-status-text"
+    ).textContent = statusText;
+
+    banner.querySelector(
+        ".voice-mode-end-button"
+    ).addEventListener(
+        "click",
+        () => {
+            deactivateVoiceMode();
+        }
+    );
+
+    chatMessages.appendChild(banner);
+    scrollConversationToBottom();
+}
+
+
+function updateVoiceModeStatus(statusText) {
+    const status = document.getElementById(
+        "voice-mode-status-text"
+    );
+
+    if (status) {
+        status.textContent = statusText;
+        return;
+    }
+
+    if (voiceModeActive) {
+        renderVoiceModeBanner(statusText);
+    }
+}
+
+
+function stopSpeechRecognition() {
+    suppressRecognitionRestart = true;
+
+    if (
+        speechRecognition &&
+        speechRecognitionActive
+    ) {
+        try {
+            speechRecognition.stop();
+        } catch {
+            // The browser may already be stopping recognition.
+        }
+    }
+
+    speechRecognitionActive = false;
+    setMicrophoneState("idle");
+}
+
+
+function createSpeechRecognition() {
+    const Recognition = (
+        getSpeechRecognitionConstructor()
+    );
+
+    if (!Recognition) {
+        return null;
+    }
+
+    const recognition = new Recognition();
+
+    recognition.continuous = false;
+    recognition.interimResults = false;
+    recognition.maxAlternatives = 1;
+    recognition.lang = (
+        navigator.language ||
+        "en-US"
+    );
+
+    recognition.onstart = () => {
+        speechRecognitionActive = true;
+        suppressRecognitionRestart = false;
+
+        setMicrophoneState("listening");
+
+        if (voiceModeActive) {
+            updateVoiceModeStatus(
+                "Listening… speak naturally."
+            );
+        }
+    };
+
+    recognition.onresult = (event) => {
+        const transcript = (
+            event.results?.[0]?.[0]?.transcript ||
+            ""
+        ).trim();
+
+        if (!transcript) {
+            return;
+        }
+
+        registerUserActivity();
+
+        if (
+            recognitionAutoSubmit &&
+            voiceModeActive
+        ) {
+            chatInput.value = "";
+
+            updateVoiceModeStatus(
+                "Thinking…"
+            );
+
+            submitMessage(
+                transcript,
+                transcript,
+                {
+                    voiceMode: true,
+                    autoSpeak: true
+                }
+            );
+
+            return;
+        }
+
+        chatInput.value = transcript;
+        chatInput.dispatchEvent(
+            new Event("input")
+        );
+        chatInput.focus();
+    };
+
+    recognition.onerror = (event) => {
+        speechRecognitionActive = false;
+        setMicrophoneState("idle");
+
+        const errorName = event.error || "unknown";
+
+        if (
+            errorName === "no-speech" ||
+            errorName === "aborted"
+        ) {
+            return;
+        }
+
+        if (voiceModeActive) {
+            updateVoiceModeStatus(
+                "Microphone unavailable — tap the mic to try again."
+            );
+        }
+    };
+
+    recognition.onend = () => {
+        speechRecognitionActive = false;
+        setMicrophoneState("idle");
+
+        if (
+            voiceModeActive &&
+            recognitionAutoSubmit &&
+            !waitingForReply &&
+            !voiceModeSpeaking &&
+            !sessionEnded &&
+            !stillTherePromptActive &&
+            !suppressRecognitionRestart
+        ) {
+            window.setTimeout(
+                () => {
+                    startSpeechRecognition(true);
+                },
+                650
+            );
+        }
+    };
+
+    return recognition;
+}
+
+
+function startSpeechRecognition(autoSubmit = false) {
+    if (sessionEnded) {
+        return;
+    }
+
+    if (!speechRecognitionIsSupported()) {
+        addAssistantMessage(
+            "**Microphone not available in this browser.**\n" +
+            "Speech-to-text works best in a browser with Web Speech recognition support, such as current Chrome or Edge."
+        );
+
+        if (voiceModeActive) {
+            deactivateVoiceMode({
+                silent: true
+            });
+        }
+
+        return;
+    }
+
+    if (speechRecognitionActive) {
+        stopSpeechRecognition();
+        return;
+    }
+
+    recognitionAutoSubmit = autoSubmit;
+    suppressRecognitionRestart = false;
+
+    speechRecognition = createSpeechRecognition();
+
+    try {
+        speechRecognition.start();
+    } catch {
+        setMicrophoneState("idle");
+    }
+}
+
+
+async function playVoiceModeResponse(messageText) {
+    if (!voiceModeActive || sessionEnded) {
+        return;
+    }
+
+    stopSpeechRecognition();
+    stopActiveSpeech();
+
+    voiceModeSpeaking = true;
+    updateVoiceModeStatus(
+        "A.I.D.A. is speaking…"
+    );
+
+    try {
+        const audioUrl = await fetchSpeechAudio(
+            messageText
+        );
+
+        const audio = new Audio(audioUrl);
+        activeAudio = audio;
+
+        audio.addEventListener(
+            "ended",
+            () => {
+                activeAudio = null;
+                voiceModeSpeaking = false;
+
+                if (
+                    voiceModeActive &&
+                    !sessionEnded
+                ) {
+                    updateVoiceModeStatus(
+                        "Listening… speak naturally."
+                    );
+
+                    window.setTimeout(
+                        () => {
+                            startSpeechRecognition(true);
+                        },
+                        450
+                    );
+                }
+            }
+        );
+
+        audio.addEventListener(
+            "error",
+            () => {
+                activeAudio = null;
+                voiceModeSpeaking = false;
+
+                if (voiceModeActive) {
+                    updateVoiceModeStatus(
+                        "Speech playback failed — listening again."
+                    );
+
+                    window.setTimeout(
+                        () => {
+                            startSpeechRecognition(true);
+                        },
+                        700
+                    );
+                }
+            }
+        );
+
+        await audio.play();
+
+    } catch (error) {
+        voiceModeSpeaking = false;
+
+        updateVoiceModeStatus(
+            "Speech could not play — listening again."
+        );
+
+        if (voiceModeActive) {
+            window.setTimeout(
+                () => {
+                    startSpeechRecognition(true);
+                },
+                700
+            );
+        }
+    }
+}
+
+
+function activateVoiceMode() {
+    if (
+        voiceModeActive ||
+        sessionEnded
+    ) {
+        return;
+    }
+
+    if (!speechRecognitionIsSupported()) {
+        addAssistantMessage(
+            "**Voice Mode needs microphone speech recognition.**\n" +
+            "Please use a current Chrome or Edge browser for this prototype."
+        );
+        return;
+    }
+
+    voiceModeActive = true;
+    voiceModeSpeaking = false;
+
+    chatWidget.classList.add(
+        "voice-mode-active"
+    );
+
+    buildHelpDrawer();
+
+    addAssistantMessage(
+        "**Voice Mode is on.**\nSpeak naturally. I’ll keep spoken answers shorter, show the text, and listen again after I reply.",
+        [],
+        {
+            countUnread: false
+        }
+    );
+
+    renderVoiceModeBanner(
+        "Listening… speak naturally."
+    );
+
+    registerUserActivity();
+
+    window.setTimeout(
+        () => {
+            startSpeechRecognition(true);
+        },
+        450
+    );
+}
+
+
+function deactivateVoiceMode(
+    options = {}
+) {
+    if (!voiceModeActive) {
+        return;
+    }
+
+    voiceModeActive = false;
+    voiceModeSpeaking = false;
+
+    stopSpeechRecognition();
+    stopActiveSpeech();
+    removeVoiceModeBanner();
+
+    chatWidget.classList.remove(
+        "voice-mode-active"
+    );
+
+    setMicrophoneState("idle");
+    buildHelpDrawer();
+
+    if (!options.silent && !sessionEnded) {
+        addAssistantMessage(
+            "Voice Mode ended. You can continue by typing or use the microphone for one-time dictation.",
+            [],
+            {
+                countUnread: false
+            }
+        );
+    }
+}
+
+
+function toggleVoiceMode() {
+    if (voiceModeActive) {
+        deactivateVoiceMode();
+        return;
+    }
+
+    activateVoiceMode();
+}
+
+
+// ---------------------------------------------------------
 // Window and layout controls
 // ---------------------------------------------------------
 
@@ -219,8 +1462,18 @@ function openChatbot() {
     chatWidget.setAttribute("aria-hidden", "false");
     launcher.setAttribute("aria-expanded", "true");
 
+    clearUnreadNotifications();
+
+    if (!sessionStarted && !sessionEnded) {
+        sessionStarted = true;
+        scheduleInactivityWarning();
+    }
+
     window.setTimeout(() => {
-        chatInput.focus();
+        if (!sessionEnded) {
+            chatInput.focus();
+        }
+
         scrollConversationToBottom();
     }, 190);
 }
@@ -235,6 +1488,9 @@ function closeChatbot() {
 
     chatWidget.setAttribute("aria-hidden", "true");
     launcher.setAttribute("aria-expanded", "false");
+
+    // Minimising does not pause the inactivity clock.
+    // If A.I.D.A. replies while minimised, the launcher badge updates.
 }
 
 
@@ -509,7 +1765,7 @@ function renderRichText(container, markdownText) {
         }
 
         const unorderedMatch = line.match(
-            /^[-•]\s+(.+)$/
+            /^(?:[-•]|\*)\s+(.+)$/
         );
 
         const orderedMatch = line.match(
@@ -747,7 +2003,8 @@ function addUserMessage(messageText) {
 
 function addAssistantMessage(
     messageText,
-    formResources = []
+    formResources = [],
+    options = {}
 ) {
     const messageGroup = createMessageGroup(
         "assistant",
@@ -762,6 +2019,10 @@ function addAssistantMessage(
     chatMessages.appendChild(
         messageGroup
     );
+
+    if (options.countUnread !== false) {
+        registerAssistantNotification();
+    }
 
     scrollConversationToBottom();
 }
@@ -832,7 +2093,7 @@ function createFormResources(forms) {
 
         officialLink.innerHTML = `
             ${iconSvg("downloadFile")}
-            <span>Official IRD PDF</span>
+            <span>${form.official_button_label || "Official IRD PDF"}</span>
         `;
 
         actions.appendChild(officialLink);
@@ -1155,12 +2416,30 @@ function buildHelpDrawer() {
             button.dataset.tone = "orange";
         }
 
+        const displayLabel = (
+            action.action === "voice" &&
+            voiceModeActive
+        )
+            ? "End Voice Mode"
+            : action.label;
+
+        button.classList.toggle(
+            "voice-mode-card",
+            action.action === "voice"
+        );
+
+        button.classList.toggle(
+            "is-active",
+            action.action === "voice" &&
+            voiceModeActive
+        );
+
         button.innerHTML = `
             <span class="quick-action-icon">
                 ${iconSvg(action.icon)}
             </span>
 
-            <span>${action.label}</span>
+            <span>${displayLabel}</span>
         `;
 
         button.addEventListener("click", () => {
@@ -1171,9 +2450,18 @@ function buildHelpDrawer() {
                 return;
             }
 
+            if (action.action === "voice") {
+                toggleVoiceMode();
+                return;
+            }
+
             submitMessage(
                 action.question,
-                action.label
+                action.label,
+                {
+                    voiceMode: voiceModeActive,
+                    autoSpeak: voiceModeActive
+                }
             );
         });
 
@@ -1196,7 +2484,11 @@ function buildHelpDrawer() {
 
             submitMessage(
                 question,
-                question
+                question,
+                {
+                    voiceMode: voiceModeActive,
+                    autoSpeak: voiceModeActive
+                }
             );
         });
 
@@ -1334,7 +2626,10 @@ function setWaitingState(waiting) {
 }
 
 
-async function requestAidaResponse(question) {
+async function requestAidaResponse(
+    question,
+    options = {}
+) {
     const response = await fetch(
         "/api/chat",
         {
@@ -1346,7 +2641,10 @@ async function requestAidaResponse(question) {
                 {
                     question,
                     messages:
-                        conversationHistory.slice(-8)
+                        conversationHistory.slice(-8),
+                    voice_mode: Boolean(
+                        options.voiceMode
+                    )
                 }
             )
         }
@@ -1390,14 +2688,21 @@ async function requestAidaResponse(question) {
 
 async function submitMessage(
     questionText,
-    displayText = questionText
+    displayText = questionText,
+    options = {}
 ) {
     const cleanedQuestion = questionText.trim();
     const cleanedDisplayText = displayText.trim();
 
-    if (!cleanedQuestion || waitingForReply) {
+    if (
+        !cleanedQuestion ||
+        waitingForReply ||
+        sessionEnded
+    ) {
         return;
     }
+
+    registerUserActivity();
 
     closeHelpDrawer();
 
@@ -1409,11 +2714,12 @@ async function submitMessage(
 
     try {
         const result = await requestAidaResponse(
-            cleanedQuestion
+            cleanedQuestion,
+            options
         );
 
-        // Keep the typing indicator visible briefly so the response
-        // feels deliberate without making the visitor wait too long.
+        // Leave the thinking animation on screen briefly so the
+        // answer feels natural without making the visitor wait.
         const responseDelay = Math.min(
             950,
             360 + Math.floor(
@@ -1441,6 +2747,15 @@ async function submitMessage(
             }
         );
 
+        if (
+            options.autoSpeak &&
+            voiceModeActive
+        ) {
+            await playVoiceModeResponse(
+                result.answer
+            );
+        }
+
     } catch (error) {
         removeTypingIndicator();
 
@@ -1451,7 +2766,14 @@ async function submitMessage(
 
     } finally {
         setWaitingState(false);
-        chatInput.focus();
+
+        if (!sessionEnded) {
+            scheduleInactivityWarning();
+
+            if (!voiceModeActive) {
+                chatInput.focus();
+            }
+        }
     }
 }
 
@@ -1470,7 +2792,11 @@ function loadInitialConversation() {
         "Hello! 👋 I’m **A.I.D.A.**, your Anguilla Inland Revenue " +
         "Assistant. I’m here to help with tax information, licences, " +
         "payments and forms.\n\n" +
-        "**How can I assist you today?**"
+        "**How can I assist you today?**",
+        [],
+        {
+            countUnread: false
+        }
     );
 }
 
@@ -1524,19 +2850,33 @@ chatForm.addEventListener(
     "submit",
     (event) => {
         event.preventDefault();
-        submitMessage(chatInput.value);
+        submitMessage(
+            chatInput.value,
+            chatInput.value,
+            {
+                voiceMode: voiceModeActive,
+                autoSpeak: voiceModeActive
+            }
+        );
     }
 );
 
 
-attachmentButton?.addEventListener(
+microphoneButton?.addEventListener(
     "click",
     () => {
-        addAssistantMessage(
-            "File attachments are not enabled in this demonstration yet. " +
-            "Use **Help → Download Forms** to find the official and " +
-            "fillable form options."
-        );
+        if (sessionEnded) {
+            return;
+        }
+
+        registerUserActivity();
+
+        if (voiceModeActive) {
+            deactivateVoiceMode();
+            return;
+        }
+
+        startSpeechRecognition(false);
     }
 );
 
@@ -1563,9 +2903,53 @@ document.addEventListener(
 
 
 // ---------------------------------------------------------
+// User activity monitoring
+// ---------------------------------------------------------
+
+chatInput.addEventListener(
+    "input",
+    () => {
+        registerUserActivity();
+    }
+);
+
+
+chatWidget.addEventListener(
+    "pointerdown",
+    (event) => {
+        // Survey interaction happens after the session has already ended,
+        // so it intentionally does not restart the inactivity timer.
+        if (
+            event.target.closest(
+                ".session-survey"
+            )
+        ) {
+            return;
+        }
+
+        registerUserActivity();
+    }
+);
+
+
+document.addEventListener(
+    "visibilitychange",
+    () => {
+        if (
+            !document.hidden &&
+            chatWidget.classList.contains("open")
+        ) {
+            clearUnreadNotifications();
+        }
+    }
+);
+
+
+// ---------------------------------------------------------
 // Start
 // ---------------------------------------------------------
 
 buildHelpDrawer();
+setMicrophoneState("idle");
 loadInitialConversation();
 loadSpeechStatus();

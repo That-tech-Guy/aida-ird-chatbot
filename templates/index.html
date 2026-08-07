@@ -48,6 +48,20 @@
         >
 
         <span class="launcher-status" aria-hidden="true"></span>
+
+        <!--
+            Unread A.I.D.A. responses appear here whenever the widget
+            is minimised or the browser tab is not being viewed.
+        -->
+        <span
+            class="notification-badge"
+            id="notification-badge"
+            aria-live="polite"
+            aria-label="No unread A.I.D.A. messages"
+            hidden
+        >
+            0
+        </span>
     </button>
 
     <!-- Main floating chatbot -->
@@ -59,32 +73,141 @@
     >
         <header class="chat-header">
 
-            <!-- Real illustration assets based on the supplied Anguilla and IRD imagery -->
-            <div
+            <!-- Anguilla-inspired decorative line art -->
+            <svg
                 class="header-art"
+                viewBox="0 0 520 170"
+                aria-hidden="true"
+            >
+                <defs>
+                    <linearGradient
+                        id="islandFill"
+                        x1="0"
+                        y1="0"
+                        x2="1"
+                        y2="1"
+                    >
+                        <stop
+                            offset="0%"
+                            stop-color="#59ef8f"
+                            stop-opacity="0.22"
+                        />
+                        <stop
+                            offset="100%"
+                            stop-color="#ff8a00"
+                            stop-opacity="0.05"
+                        />
+                    </linearGradient>
+
+                    <radialGradient
+                        id="headerGlow"
+                        cx="50%"
+                        cy="50%"
+                        r="50%"
+                    >
+                        <stop
+                            offset="0%"
+                            stop-color="#ffb42b"
+                            stop-opacity="0.72"
+                        />
+                        <stop
+                            offset="100%"
+                            stop-color="#ff7900"
+                            stop-opacity="0"
+                        />
+                    </radialGradient>
+                </defs>
+
+                <circle
+                    cx="465"
+                    cy="90"
+                    r="95"
+                    fill="url(#headerGlow)"
+                />
+
+                <!-- Document icon -->
+                <g class="header-line-icon document-icon">
+                    <path d="M315 23h34l17 17v43h-51z" />
+                    <path d="M349 23v18h17" />
+                    <path d="M326 53h25M326 64h20" />
+                </g>
+
+                <!-- Simplified Anguilla island silhouette -->
+                <path
+                    class="anguilla-island"
+                    d="
+                        M250 111
+                        C275 98 296 96 320 88
+                        C347 79 370 65 397 62
+                        C421 59 444 65 468 58
+                        C481 54 494 47 507 40
+                        C498 52 487 64 474 74
+                        C454 89 435 101 412 107
+                        C388 113 367 109 343 113
+                        C318 117 294 126 269 128
+                        C259 127 253 121 250 111
+                        Z
+                    "
+                />
+
+                <path
+                    class="topographic-line line-one"
+                    d="M390 20C429 43 467 62 519 66"
+                />
+                <path
+                    class="topographic-line line-two"
+                    d="M375 9C428 30 478 43 521 44"
+                />
+                <path
+                    class="topographic-line line-three"
+                    d="M408 39C450 61 484 80 520 91"
+                />
+
+                <!-- Bank / public-service icon -->
+                <g class="header-line-icon bank-icon">
+                    <path d="m420 135 31-22 31 22" />
+                    <path d="M426 136h50M431 136v24M445 136v24M460 136v24M474 136v24M423 161h56" />
+                    <rect x="448" y="126" width="7" height="10" rx="1" />
+                </g>
+
+                <!-- Revenue icon -->
+                <g class="header-line-icon money-icon">
+                    <circle cx="490" cy="91" r="24" />
+                    <path d="M490 75v32M499 81c-3-4-17-5-17 3 0 10 17 4 17 14 0 8-14 8-19 3" />
+                </g>
+            </svg>
+
+            <!--
+                Real header illustration assets.
+                The original SVG artwork above is intentionally retained
+                so the existing HTML is not removed; CSS hides that SVG
+                and displays these supplied illustration assets instead.
+            -->
+            <div
+                class="real-header-art"
                 aria-hidden="true"
             >
                 <img
-                    class="header-art-image header-document-art"
+                    class="real-header-image real-header-document"
                     src="{{ url_for('static', filename='images/header/document.png') }}"
                     alt=""
                 >
 
                 <img
-                    class="header-art-image header-anguilla-art"
+                    class="real-header-image real-header-anguilla"
                     src="{{ url_for('static', filename='images/header/anguilla-map.png') }}"
                     alt=""
                 >
 
                 <img
-                    class="header-art-image header-bank-art"
-                    src="{{ url_for('static', filename='images/header/bank.png') }}"
+                    class="real-header-image real-header-revenue"
+                    src="{{ url_for('static', filename='images/header/revenue.png') }}"
                     alt=""
                 >
 
                 <img
-                    class="header-art-image header-revenue-art"
-                    src="{{ url_for('static', filename='images/header/revenue.png') }}"
+                    class="real-header-image real-header-bank"
+                    src="{{ url_for('static', filename='images/header/bank.png') }}"
                     alt=""
                 >
             </div>
@@ -253,15 +376,16 @@
                     >
 
                     <button
-                        class="attachment-button"
+                        class="attachment-button microphone-button"
+                        id="microphone-button"
                         type="button"
-                        aria-label="Attach a file"
-                        title="Attachment preview only"
+                        aria-label="Speak your question"
+                        title="Speak your question"
                     >
                         <svg viewBox="0 0 24 24" aria-hidden="true">
-                            <path
-                                d="M8.5 12.5 14.9 6.1a3 3 0 0 1 4.2 4.2l-8.5 8.5a5 5 0 0 1-7.1-7.1l8-8"
-                            />
+                            <rect x="9" y="3" width="6" height="11" rx="3" />
+                            <path d="M6 11a6 6 0 0 0 12 0" />
+                            <path d="M12 17v4M9 21h6" />
                         </svg>
                     </button>
                 </div>
