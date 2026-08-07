@@ -5,7 +5,7 @@ Run the application with:
     py -m streamlit run aida_app.py
 
 Install the required libraries with:
-    py -m pip install streamlit google-genai requests reportlab
+    py -m pip install streamlit google-genai requests reportlab pandas pillow
 
 Email delivery requires SMTP_HOST, SMTP_PORT, SMTP_FROM_EMAIL,
 IRD_FORM_RECIPIENT and any required SMTP credentials in
@@ -16,20 +16,25 @@ import base64
 import copy
 import csv
 import html
+import hmac
 import os
 import re
+import shutil
 import smtplib
 import ssl
-from datetime import datetime, timezone
+from datetime import datetime, time, timezone
 from email.message import EmailMessage
 from html.parser import HTMLParser
 from io import BytesIO
 from pathlib import Path
+from zoneinfo import ZoneInfo
 
+import pandas as pd
 import requests
 import streamlit as st
 import streamlit.components.v1 as components
 from google import genai
+from PIL import Image as PILImage, ImageOps, UnidentifiedImageError
 from reportlab.lib import colors
 from reportlab.lib.enums import TA_CENTER
 from reportlab.lib.pagesizes import LETTER
@@ -105,6 +110,42 @@ BOT_AVATAR_FILE = (
 SURVEY_RESPONSE_FILE = (
     APP_FOLDER / "aida_chat_survey_responses.csv"
 )
+
+# The khan branch used this file for older per-answer feedback.
+# The merged application keeps the data available to staff without
+# restoring duplicate feedback buttons to every assistant message.
+LEGACY_FEEDBACK_FILE = (
+    APP_FOLDER / "IRD_Anguilla_Chatbot_Feedback.csv"
+)
+
+# Backups are made before staff replace or edit the knowledge base.
+KNOWLEDGE_BACKUP_FOLDER = (
+    APP_FOLDER / "knowledge_base_backups"
+)
+
+# These spellings affect only ElevenLabs speech, not the visible text.
+# Change either value manually if the selected voice needs a different cue.
+AIDA_SPEECH_PRONUNCIATION = "Aida"
+ANGUILLA_SPEECH_PRONUNCIATION = "Ang-will-uh"
+
+# A local CSV copy is kept for after-hours follow-up requests.
+# A Google Sheet may also be configured through a webhook.
+ESCALATION_REQUEST_FILE = (
+    APP_FOLDER / "aida_after_hours_follow_up_requests.csv"
+)
+
+# Current public IRD contact information and regular office hours.
+# These defaults may be overridden in Streamlit Secrets.
+DEFAULT_IRD_PHONE = "+1 (264) 497-8334"
+DEFAULT_IRD_EMAIL = "inlandrevenue@gov.ai"
+DEFAULT_IRD_LOCATION = (
+    "Former NBA Building, Ground Floor, P.O. Box 60, "
+    "The Valley, Anguilla"
+)
+DEFAULT_IRD_OFFICE_HOURS = "Monday-Friday, 8:00 a.m.-3:00 p.m."
+DEFAULT_IRD_TIMEZONE = "America/Anguilla"
+DEFAULT_IRD_OPEN_TIME = "08:00"
+DEFAULT_IRD_CLOSE_TIME = "15:00"
 
 # A.I.D.A. document colours mirror the chatbot interface.
 PDF_PRIMARY_GREEN = colors.HexColor("#17733f")
@@ -418,6 +459,24 @@ RESOURCE_TEXT = {
             "I confirm that the information is accurate and consent "
             "to it being emailed to IRD for review."
         ),
+        "signature_upload": "Upload scanned signature",
+        "signature_help": (
+            "Upload a clear PNG, JPG or JPEG image of the applicant's "
+            "signature. Maximum file size: 5 MB."
+        ),
+        "signature_preview": "Signature preview",
+        "signature_date": "Date signed",
+        "signature_required": (
+            "Upload the scanned signature and enter the date signed."
+        ),
+        "invalid_signature": (
+            "Upload a valid PNG, JPG or JPEG signature image smaller "
+            "than 5 MB."
+        ),
+        "signature_privacy": (
+            "The scanned signature is included only in the completed PDF "
+            "and is sent with the form after consent is confirmed."
+        ),
         "reply_email": "Contact email",
         "upload_heading": "Already completed the editable PDF?",
         "upload_help": (
@@ -494,6 +553,23 @@ RESOURCE_TEXT = {
             "Confirmo que la información es correcta y autorizo su envío "
             "por correo al IRD para revisión."
         ),
+        "signature_upload": "Subir firma escaneada",
+        "signature_help": (
+            "Suba una imagen clara PNG, JPG o JPEG de la firma del "
+            "solicitante. Tamaño máximo: 5 MB."
+        ),
+        "signature_preview": "Vista previa de la firma",
+        "signature_date": "Fecha de firma",
+        "signature_required": (
+            "Suba la firma escaneada e introduzca la fecha de firma."
+        ),
+        "invalid_signature": (
+            "Suba una imagen válida PNG, JPG o JPEG de menos de 5 MB."
+        ),
+        "signature_privacy": (
+            "La firma escaneada se incluye únicamente en el PDF completado "
+            "y se envía con el formulario después de confirmar el consentimiento."
+        ),
         "reply_email": "Correo electrónico de contacto",
         "upload_heading": "¿Ya completó el PDF editable?",
         "upload_help": (
@@ -509,6 +585,196 @@ RESOURCE_TEXT = {
         ),
         "select_form": "Seleccione un formulario",
         "download_overview": "Descargar resumen de formularios del IRD",
+    },
+}
+
+
+# ---------------------------------------------------------
+# After-hours escalation and follow-up wording
+# ---------------------------------------------------------
+
+ESCALATION_TEXT = {
+    "en": {
+        "card_title": "Contact the Inland Revenue Department",
+        "open_intro": (
+            "The IRD office is currently open. Please contact the department "
+            "directly so an authorised officer can assist you."
+        ),
+        "closed_intro": (
+            "The IRD office is currently closed. You may leave basic contact "
+            "details for staff to review when the office reopens."
+        ),
+        "phone": "Phone",
+        "email": "Email",
+        "location": "Location",
+        "hours": "Regular office hours",
+        "request_button": "📞 Request an IRD follow-up",
+        "request_open": "The after-hours follow-up form is open below.",
+        "form_title": "After-hours IRD follow-up request",
+        "form_intro": (
+            "Use this form only to request contact from an IRD staff member. "
+            "Submitting it does not complete a payment, approve an application "
+            "or give access to a taxpayer account."
+        ),
+        "privacy": (
+            "Do not enter a TIN, taxpayer account number, password, banking "
+            "details, card information, authentication code, tax balance or "
+            "supporting documents. A.I.D.A. stores only the contact details "
+            "and short service description entered below."
+        ),
+        "title": "Title",
+        "title_options": [
+            "Mr", "Mrs", "Ms", "Dr", "Mx", "Prefer not to say"
+        ],
+        "full_name": "Full name",
+        "phone_number": "Telephone number",
+        "email_address": "Email address",
+        "service": "Service or unit needed",
+        "service_options": {
+            "general": "General enquiries / Taxpayer Services",
+            "payments": "Payments and Collections",
+            "gst": "General Services Tax (GST)",
+            "usl": "Universal Social Levy (USL)",
+            "property": "Property Tax",
+            "business": "Business Licence",
+            "liquor": "Liquor Licence",
+            "vehicle": "Vehicle or Driver's Licence",
+            "portal": "Online Portal Support",
+            "clearance": "Tax Clearance / Good Standing",
+            "compliance": "Compliance, Audit, Objection or Appeal",
+            "other": "Other / Not sure",
+        },
+        "reason": "Briefly describe the help you need",
+        "reason_help": (
+            "Keep this general. Do not include private taxpayer records or "
+            "financial information."
+        ),
+        "preferred_contact": "Preferred contact method",
+        "preferred_options": ["Phone", "Email", "Either"],
+        "consent": (
+            "I consent to the Inland Revenue Department storing and using "
+            "these details to contact me about this request."
+        ),
+        "submit": "Save follow-up request",
+        "close": "Close request form",
+        "required": "Please complete all required fields.",
+        "invalid_phone": "Enter a valid telephone number.",
+        "invalid_email": "Enter a valid email address.",
+        "consent_required": "Consent is required before the request can be saved.",
+        "success": (
+            "Your after-hours follow-up request was saved for IRD staff review. "
+            "This is not confirmation that a payment, filing or application "
+            "was completed."
+        ),
+        "reference": "Follow-up reference",
+        "save_error": (
+            "The request could not be saved. Please use the official IRD phone "
+            "or email shown above."
+        ),
+        "office_opened": (
+            "The IRD office is now within regular working hours. Please use "
+            "the direct contact information shown in the chat."
+        ),
+        "speech_open": (
+            "The Inland Revenue Department is currently open. "
+            "Its official contact details are shown below."
+        ),
+        "speech_closed": (
+            "The Inland Revenue Department is currently closed. "
+            "A dedicated follow-up form is available below."
+        ),
+    },
+    "es": {
+        "card_title": "Contactar al Departamento de Rentas Internas",
+        "open_intro": (
+            "La oficina del IRD está abierta actualmente. Comuníquese "
+            "directamente con el departamento para recibir ayuda de un "
+            "funcionario autorizado."
+        ),
+        "closed_intro": (
+            "La oficina del IRD está cerrada actualmente. Puede dejar datos "
+            "básicos de contacto para que el personal los revise cuando la "
+            "oficina vuelva a abrir."
+        ),
+        "phone": "Teléfono",
+        "email": "Correo electrónico",
+        "location": "Ubicación",
+        "hours": "Horario regular",
+        "request_button": "📞 Solicitar seguimiento del IRD",
+        "request_open": "El formulario de seguimiento fuera de horario está abierto abajo.",
+        "form_title": "Solicitud de seguimiento fuera del horario del IRD",
+        "form_intro": (
+            "Use este formulario únicamente para solicitar contacto de un "
+            "funcionario del IRD. Enviarlo no completa un pago, no aprueba una "
+            "solicitud y no da acceso a una cuenta tributaria."
+        ),
+        "privacy": (
+            "No introduzca TIN, número de cuenta tributaria, contraseña, datos "
+            "bancarios, información de tarjeta, código de autenticación, saldo "
+            "tributario ni documentos de apoyo. A.I.D.A. guarda únicamente los "
+            "datos de contacto y la breve descripción introducida abajo."
+        ),
+        "title": "Título",
+        "title_options": [
+            "Sr.", "Sra.", "Srta.", "Dr.", "Dra.", "Prefiero no indicarlo"
+        ],
+        "full_name": "Nombre completo",
+        "phone_number": "Número de teléfono",
+        "email_address": "Correo electrónico",
+        "service": "Servicio o unidad requerida",
+        "service_options": {
+            "general": "Consultas generales / Servicios al Contribuyente",
+            "payments": "Pagos y Cobros",
+            "gst": "Impuesto General sobre Servicios (GST)",
+            "usl": "Gravamen Social Universal (USL)",
+            "property": "Impuesto sobre la Propiedad",
+            "business": "Licencia Comercial",
+            "liquor": "Licencia de Bebidas Alcohólicas",
+            "vehicle": "Licencia de Vehículo o Conducir",
+            "portal": "Ayuda con el Portal en Línea",
+            "clearance": "Solvencia Tributaria / Cumplimiento",
+            "compliance": "Cumplimiento, Auditoría, Objeción o Apelación",
+            "other": "Otro / No estoy seguro",
+        },
+        "reason": "Describa brevemente la ayuda que necesita",
+        "reason_help": (
+            "Mantenga la descripción general. No incluya registros privados "
+            "de contribuyentes ni información financiera."
+        ),
+        "preferred_contact": "Método de contacto preferido",
+        "preferred_options": ["Teléfono", "Correo electrónico", "Cualquiera"],
+        "consent": (
+            "Autorizo al Departamento de Rentas Internas a guardar y utilizar "
+            "estos datos para contactarme sobre esta solicitud."
+        ),
+        "submit": "Guardar solicitud de seguimiento",
+        "close": "Cerrar formulario de solicitud",
+        "required": "Complete todos los campos obligatorios.",
+        "invalid_phone": "Introduzca un número de teléfono válido.",
+        "invalid_email": "Introduzca un correo electrónico válido.",
+        "consent_required": "Se requiere autorización antes de guardar la solicitud.",
+        "success": (
+            "Su solicitud de seguimiento fuera de horario fue guardada para "
+            "revisión del personal del IRD. Esto no confirma que un pago, una "
+            "declaración o una solicitud haya sido completada."
+        ),
+        "reference": "Referencia de seguimiento",
+        "save_error": (
+            "No se pudo guardar la solicitud. Use el teléfono o correo oficial "
+            "del IRD mostrado arriba."
+        ),
+        "office_opened": (
+            "La oficina del IRD está ahora dentro de su horario regular. Use "
+            "la información de contacto directo mostrada en el chat."
+        ),
+        "speech_open": (
+            "El Departamento de Rentas Internas está abierto actualmente. "
+            "Sus datos oficiales de contacto aparecen abajo."
+        ),
+        "speech_closed": (
+            "El Departamento de Rentas Internas está cerrado actualmente. "
+            "Hay un formulario de seguimiento disponible abajo."
+        ),
     },
 }
 
@@ -1804,6 +2070,13 @@ configured_gemini_model = (
     )
 )
 
+# The khan branch contained a hard-coded staff password. The merged
+# version keeps the feature but requires the password to be supplied
+# securely through Streamlit Secrets or an environment variable.
+aida_admin_password = get_secret_or_environment_variable(
+    "AIDA_ADMIN_PASSWORD"
+)
+
 # Email settings are intentionally configurable and never hard-coded.
 smtp_host = get_secret_or_environment_variable("SMTP_HOST")
 smtp_port_text = get_secret_or_environment_variable("SMTP_PORT", "587")
@@ -1825,6 +2098,59 @@ smtp_use_tls = get_secret_or_environment_variable(
     "SMTP_USE_TLS",
     "true"
 ).lower() in {"1", "true", "yes"}
+
+# After-hours follow-up settings.
+escalation_sheet_webhook_url = get_secret_or_environment_variable(
+    "ESCALATION_SHEET_WEBHOOK_URL"
+)
+escalation_sheet_webhook_token = get_secret_or_environment_variable(
+    "ESCALATION_SHEET_WEBHOOK_TOKEN"
+)
+escalation_save_local_copy = get_secret_or_environment_variable(
+    "ESCALATION_SAVE_LOCAL_COPY",
+    "true"
+).lower() in {"1", "true", "yes"}
+ird_escalation_recipient = get_secret_or_environment_variable(
+    "IRD_ESCALATION_RECIPIENT",
+    ird_form_recipient or DEFAULT_IRD_EMAIL
+)
+
+ird_contact_phone = get_secret_or_environment_variable(
+    "IRD_CONTACT_PHONE",
+    DEFAULT_IRD_PHONE
+)
+ird_contact_email = get_secret_or_environment_variable(
+    "IRD_CONTACT_EMAIL",
+    DEFAULT_IRD_EMAIL
+)
+ird_contact_location = get_secret_or_environment_variable(
+    "IRD_CONTACT_LOCATION",
+    DEFAULT_IRD_LOCATION
+)
+ird_office_hours_label = get_secret_or_environment_variable(
+    "IRD_OFFICE_HOURS_LABEL",
+    DEFAULT_IRD_OFFICE_HOURS
+)
+ird_office_hours_label_es = get_secret_or_environment_variable(
+    "IRD_OFFICE_HOURS_LABEL_ES",
+    "Lunes-viernes, 8:00 a. m.-3:00 p. m."
+)
+ird_timezone_name = get_secret_or_environment_variable(
+    "IRD_TIMEZONE",
+    DEFAULT_IRD_TIMEZONE
+)
+ird_open_time_text = get_secret_or_environment_variable(
+    "IRD_OPEN_TIME",
+    DEFAULT_IRD_OPEN_TIME
+)
+ird_close_time_text = get_secret_or_environment_variable(
+    "IRD_CLOSE_TIME",
+    DEFAULT_IRD_CLOSE_TIME
+)
+ird_closed_dates_text = get_secret_or_environment_variable(
+    "IRD_CLOSED_DATES",
+    ""
+)
 
 try:
     smtp_port = int(smtp_port_text)
@@ -1889,6 +2215,436 @@ if "dismissed_resource_messages" not in st.session_state:
 
 if "form_completion_notice" not in st.session_state:
     st.session_state.form_completion_notice = None
+
+if "active_escalation_request" not in st.session_state:
+    st.session_state.active_escalation_request = None
+
+if "active_escalation_source_index" not in st.session_state:
+    st.session_state.active_escalation_source_index = None
+
+if "active_escalation_instance_id" not in st.session_state:
+    st.session_state.active_escalation_instance_id = 0
+
+if "dismissed_escalation_messages" not in st.session_state:
+    st.session_state.dismissed_escalation_messages = set()
+
+if "escalation_completion_notice" not in st.session_state:
+    st.session_state.escalation_completion_notice = None
+
+if "admin_authenticated" not in st.session_state:
+    st.session_state.admin_authenticated = False
+
+
+# ---------------------------------------------------------
+# Staff knowledge-base administration
+# ---------------------------------------------------------
+
+REQUIRED_KNOWLEDGE_COLUMNS = [
+    "id",
+    "intent",
+    "category",
+    "language",
+    "question",
+    "answer",
+    "keywords",
+    "response_type",
+    "requires_human",
+    "action_url",
+    "source_url",
+    "review_status",
+]
+
+
+def load_knowledge_base_dataframe():
+    """
+    Load the current knowledge-base CSV without converting blank text to NaN.
+
+    Keeping values as text prevents Streamlit's table editor from changing
+    identifiers, URLs or yes/no fields unexpectedly.
+    """
+
+    return pd.read_csv(
+        KNOWLEDGE_FILE,
+        encoding="utf-8-sig",
+        dtype=str,
+        keep_default_na=False,
+    )
+
+
+def validate_and_normalise_knowledge_base(dataframe):
+    """
+    Validate an edited or uploaded knowledge base before replacing the file.
+
+    The current column order is preserved, blank rows are removed and IDs are
+    rebuilt sequentially. The chatbot cannot be left with an incomplete CSV.
+    """
+
+    dataframe = dataframe.copy()
+    dataframe.columns = [
+        str(column).strip()
+        for column in dataframe.columns
+    ]
+
+    missing_columns = [
+        column
+        for column in REQUIRED_KNOWLEDGE_COLUMNS
+        if column not in dataframe.columns
+    ]
+    if missing_columns:
+        raise ValueError(
+            "The CSV is missing required columns: "
+            + ", ".join(missing_columns)
+        )
+
+    dataframe = dataframe.fillna("")
+    for column in dataframe.columns:
+        dataframe[column] = dataframe[column].astype(str).str.strip()
+
+    # Remove rows that contain no meaningful knowledge-base content.
+    content_columns = [
+        column
+        for column in dataframe.columns
+        if column != "id"
+    ]
+    dataframe = dataframe[
+        dataframe[content_columns]
+        .apply(lambda row: any(value for value in row), axis=1)
+    ].copy()
+
+    if dataframe.empty:
+        raise ValueError(
+            "The knowledge base must contain at least one completed row."
+        )
+
+    invalid_languages = sorted(
+        {
+            value.lower()
+            for value in dataframe["language"]
+            if value.lower() not in {"en", "es"}
+        }
+    )
+    if invalid_languages:
+        raise ValueError(
+            "Language values must be en or es. Invalid values: "
+            + ", ".join(invalid_languages)
+        )
+
+    for required_text_column in ("language", "question", "answer"):
+        if (dataframe[required_text_column].str.strip() == "").any():
+            raise ValueError(
+                f"Every row requires a value in {required_text_column}."
+            )
+
+    dataframe["language"] = dataframe["language"].str.lower()
+    dataframe["id"] = range(1, len(dataframe) + 1)
+
+    ordered_columns = [
+        column
+        for column in REQUIRED_KNOWLEDGE_COLUMNS
+        if column in dataframe.columns
+    ] + [
+        column
+        for column in dataframe.columns
+        if column not in REQUIRED_KNOWLEDGE_COLUMNS
+    ]
+
+    return dataframe[ordered_columns]
+
+
+def create_knowledge_base_backup():
+    """Create a timestamped copy before a staff edit or replacement."""
+
+    if not KNOWLEDGE_FILE.exists():
+        return None
+
+    KNOWLEDGE_BACKUP_FOLDER.mkdir(
+        parents=True,
+        exist_ok=True,
+    )
+    timestamp = datetime.now(timezone.utc).strftime(
+        "%Y%m%d_%H%M%S_%f"
+    )
+    backup_path = (
+        KNOWLEDGE_BACKUP_FOLDER
+        / f"{KNOWLEDGE_FILE.stem}_{timestamp}.csv"
+    )
+    shutil.copy2(
+        KNOWLEDGE_FILE,
+        backup_path,
+    )
+    return backup_path
+
+
+def save_knowledge_base_dataframe(dataframe):
+    """
+    Validate and atomically replace the knowledge-base CSV.
+
+    A temporary file is written first so an interrupted save cannot leave the
+    application with a partially written knowledge base.
+    """
+
+    cleaned_dataframe = validate_and_normalise_knowledge_base(
+        dataframe
+    )
+    create_knowledge_base_backup()
+
+    temporary_file = KNOWLEDGE_FILE.with_suffix(
+        KNOWLEDGE_FILE.suffix + ".tmp"
+    )
+    cleaned_dataframe.to_csv(
+        temporary_file,
+        index=False,
+        encoding="utf-8-sig",
+    )
+    os.replace(
+        temporary_file,
+        KNOWLEDGE_FILE,
+    )
+    return cleaned_dataframe
+
+
+@st.dialog(
+    "⚙️ Knowledge Base Editor",
+    width="large",
+)
+def edit_knowledge_base_dialog():
+    """
+    Let an authenticated staff member edit, add or remove CSV rows.
+
+    Saving causes a complete Streamlit rerun, which reloads the revised
+    knowledge-base text used by Gemini.
+    """
+
+    st.caption(
+        "Edit existing entries or use the final blank row to add a new one. "
+        "A backup is created before changes are applied."
+    )
+
+    try:
+        dataframe = load_knowledge_base_dataframe()
+    except Exception as error:
+        st.error(
+            f"Could not load the knowledge base: {error}"
+        )
+        return
+
+    column_config = {
+        "id": st.column_config.NumberColumn(
+            "ID",
+            disabled=True,
+            help="IDs are regenerated automatically when saved.",
+        ),
+        "language": st.column_config.SelectboxColumn(
+            "Language",
+            options=["en", "es"],
+            required=True,
+        ),
+        "question": st.column_config.TextColumn(
+            "Question",
+            required=True,
+        ),
+        "answer": st.column_config.TextColumn(
+            "Answer",
+            required=True,
+        ),
+    }
+
+    edited_dataframe = st.data_editor(
+        dataframe,
+        num_rows="dynamic",
+        column_config=column_config,
+        use_container_width=True,
+        hide_index=True,
+        key="staff_knowledge_base_editor",
+    )
+
+    if st.button(
+        "💾 Save and apply changes",
+        key="save_staff_knowledge_base",
+        use_container_width=True,
+    ):
+        try:
+            saved_dataframe = save_knowledge_base_dataframe(
+                edited_dataframe
+            )
+        except Exception as error:
+            st.error(
+                f"The knowledge base was not changed: {error}"
+            )
+        else:
+            st.success(
+                f"Saved {len(saved_dataframe)} knowledge-base entries."
+            )
+            st.rerun()
+
+
+def render_csv_download(
+    label,
+    file_path,
+    download_name,
+    key,
+):
+    """Display a staff CSV download only when the file exists."""
+
+    if not file_path.exists():
+        st.sidebar.caption(
+            f"{download_name}: no file has been created yet."
+        )
+        return
+
+    try:
+        file_bytes = file_path.read_bytes()
+    except Exception as error:
+        st.sidebar.error(
+            f"Could not read {file_path.name}: {error}"
+        )
+        return
+
+    st.sidebar.download_button(
+        label,
+        data=file_bytes,
+        file_name=download_name,
+        mime="text/csv",
+        key=key,
+        use_container_width=True,
+    )
+
+
+def render_staff_admin_panel():
+    """
+    Show the khan-branch staff tools only when ?admin=true is in the URL.
+
+    The password is never kept in the source file. Staff authentication lasts
+    only for the current Streamlit browser session.
+    """
+
+    admin_query_value = st.query_params.get(
+        "admin",
+        "",
+    )
+    if isinstance(admin_query_value, list):
+        admin_query_value = (
+            admin_query_value[0]
+            if admin_query_value
+            else ""
+        )
+    admin_query_value = str(admin_query_value).lower()
+
+    if admin_query_value != "true":
+        # Do not keep a hidden authenticated admin session after the
+        # protected query parameter has been removed.
+        st.session_state.admin_authenticated = False
+        return
+
+    st.sidebar.divider()
+    st.sidebar.subheader("🔒 Staff Admin")
+
+    if not aida_admin_password:
+        st.sidebar.warning(
+            "Staff administration is disabled until "
+            "AIDA_ADMIN_PASSWORD is configured in "
+            ".streamlit/secrets.toml."
+        )
+        return
+
+    if not st.session_state.admin_authenticated:
+        entered_password = st.sidebar.text_input(
+            "Staff password",
+            type="password",
+            key="staff_admin_password_input",
+        )
+
+        if st.sidebar.button(
+            "Sign in",
+            key="staff_admin_sign_in",
+            use_container_width=True,
+        ):
+            if hmac.compare_digest(
+                entered_password,
+                aida_admin_password,
+            ):
+                st.session_state.admin_authenticated = True
+                st.rerun()
+            else:
+                st.sidebar.error("Incorrect password.")
+        return
+
+    st.sidebar.success("Staff access enabled")
+
+    if st.sidebar.button(
+        "✏️ Open knowledge-base editor",
+        key="open_staff_kb_editor",
+        use_container_width=True,
+    ):
+        edit_knowledge_base_dialog()
+
+    st.sidebar.caption("Replace the knowledge-base CSV")
+    uploaded_knowledge_file = st.sidebar.file_uploader(
+        "Upload CSV",
+        type=["csv"],
+        key="staff_kb_csv_upload",
+        label_visibility="collapsed",
+    )
+
+    if uploaded_knowledge_file is not None:
+        if st.sidebar.button(
+            "Validate and replace knowledge base",
+            key="replace_staff_kb_csv",
+            use_container_width=True,
+        ):
+            try:
+                uploaded_dataframe = pd.read_csv(
+                    uploaded_knowledge_file,
+                    encoding="utf-8-sig",
+                    dtype=str,
+                    keep_default_na=False,
+                )
+                saved_dataframe = save_knowledge_base_dataframe(
+                    uploaded_dataframe
+                )
+            except Exception as error:
+                st.sidebar.error(
+                    f"The CSV was not applied: {error}"
+                )
+            else:
+                st.sidebar.success(
+                    f"Applied {len(saved_dataframe)} entries."
+                )
+                st.rerun()
+
+    st.sidebar.caption("Staff downloads")
+    render_csv_download(
+        "📥 Download current knowledge base",
+        KNOWLEDGE_FILE,
+        "AIDA_Knowledge_Base.csv",
+        "download_admin_kb",
+    )
+    render_csv_download(
+        "📥 Download end-of-chat surveys",
+        SURVEY_RESPONSE_FILE,
+        "AIDA_End_Chat_Surveys.csv",
+        "download_admin_surveys",
+    )
+    render_csv_download(
+        "📥 Download after-hours requests",
+        ESCALATION_REQUEST_FILE,
+        "AIDA_After_Hours_Requests.csv",
+        "download_admin_escalations",
+    )
+    render_csv_download(
+        "📥 Download legacy answer feedback",
+        LEGACY_FEEDBACK_FILE,
+        "AIDA_Legacy_Answer_Feedback.csv",
+        "download_admin_legacy_feedback",
+    )
+
+    if st.sidebar.button(
+        "Sign out",
+        key="staff_admin_sign_out",
+        use_container_width=True,
+    ):
+        st.session_state.admin_authenticated = False
+        st.rerun()
 
 
 # ---------------------------------------------------------
@@ -1967,6 +2723,7 @@ IMPORTANT KNOWLEDGE-BASE RULES
 8. For deadline or tax-date questions, give the basic answer and state that A.I.D.A. has attached a PDF copy of the official IRD Tax Calendar in the chat. Do not offer the IRD website as an additional option.
 9. For forms or registration questions, tell the user to choose the exact form from the complete form selector shown in the chat. Do not redirect the user to the IRD website.
 10. Do not claim that a digital submission has been approved; only IRD staff can review or approve it.
+11. Do not ask for personal contact information in normal chat. When a user needs payment help, an officer, a particular service unit or account-specific assistance, state that the application will show direct IRD contact details or the dedicated after-hours follow-up form.
 """
 
 
@@ -2122,7 +2879,7 @@ def get_elevenlabs_error_detail(response):
 def prepare_text_for_speech(text):
     """
     Remove Markdown and web addresses before generating
-    speech, then adjust important names for pronunciation.
+    speech so they are not read aloud.
     """
 
     speech_text = re.sub(
@@ -2131,51 +2888,47 @@ def prepare_text_for_speech(text):
         text
     )
 
-    # Remove web addresses so ElevenLabs does not read them aloud
     speech_text = re.sub(
         r"https?://\S+",
         "",
         speech_text
     )
 
-    # Remove common Markdown formatting symbols
     speech_text = re.sub(
         r"[*_`#>|]",
         "",
         speech_text
     )
 
-    # Turn list markers into natural pauses
     speech_text = re.sub(
         r"\s*[-•]\s+",
         ". ",
         speech_text
     )
 
-    # Remove repeated spaces and line breaks
     speech_text = re.sub(
         r"\s+",
         " ",
         speech_text
     ).strip()
 
-    # Help ElevenLabs pronounce the chatbot's name correctly
+    # These substitutions change only the text sent to ElevenLabs.
+    # The visible chatbot response still displays A.I.D.A. and Anguilla.
     speech_text = re.sub(
         r"A\.?I\.?D\.?A\.?",
-        "idah",
+        AIDA_SPEECH_PRONUNCIATION,
         speech_text,
-        flags=re.IGNORECASE
+        flags=re.IGNORECASE,
     )
-
-    # Help ElevenLabs pronounce Anguilla correctly
     speech_text = re.sub(
         r"\bAnguilla\b",
-        "Anguellah",
+        ANGUILLA_SPEECH_PRONUNCIATION,
         speech_text,
-        flags=re.IGNORECASE
+        flags=re.IGNORECASE,
     )
 
     return speech_text[:4500]
+
 
 def generate_speech(text):
     """
@@ -3015,11 +3768,117 @@ def create_blank_fillable_form_pdf(form_key, language="en"):
     pdf_canvas.setFillColor(PDF_DARK_TEXT)
     pdf_canvas.drawString(0.7 * inch, y_position, "Signature / Firma")
     pdf_canvas.drawString(4.7 * inch, y_position, "Date / Fecha")
-    pdf_canvas.line(0.7 * inch, y_position - 0.25 * inch, 4.2 * inch, y_position - 0.25 * inch)
-    pdf_canvas.line(4.7 * inch, y_position - 0.25 * inch, 7.8 * inch, y_position - 0.25 * inch)
+
+    # The downloadable PDF includes an editable date field. Scanned
+    # signature images are uploaded through the online A.I.D.A. form,
+    # where they can be validated and embedded in the completed PDF.
+    pdf_canvas.line(
+        0.7 * inch,
+        y_position - 0.32 * inch,
+        4.2 * inch,
+        y_position - 0.32 * inch,
+    )
+    pdf_canvas.acroForm.textfield(
+        name="signature_date",
+        x=4.7 * inch,
+        y=y_position - 0.4 * inch,
+        width=3.1 * inch,
+        height=0.3 * inch,
+        borderStyle="solid",
+        borderWidth=1,
+        borderColor=colors.HexColor("#61ad7d"),
+        fillColor=colors.white,
+        textColor=PDF_DARK_TEXT,
+        fontName="Helvetica",
+        fontSize=9,
+        forceBorder=True,
+    )
+    pdf_canvas.setFont("Helvetica", 7.5)
+    pdf_canvas.setFillColor(PDF_MUTED_TEXT)
+    pdf_canvas.drawString(
+        0.7 * inch,
+        y_position - 0.55 * inch,
+        (
+            "Upload a scanned signature through the online A.I.D.A. form."
+            if language == "en"
+            else "Suba una firma escaneada mediante el formulario en línea de A.I.D.A."
+        ),
+    )
 
     pdf_canvas.save()
     return buffer.getvalue()
+
+
+def normalise_signature_image(uploaded_signature):
+    """
+    Validate and normalise a scanned signature image.
+
+    The returned PNG has a white background, corrected orientation and
+    a bounded size suitable for email and PDF embedding.
+    """
+
+    if uploaded_signature is None:
+        return None
+
+    signature_bytes = uploaded_signature.getvalue()
+
+    if not signature_bytes or len(signature_bytes) > 5 * 1024 * 1024:
+        raise ValueError("The signature image is empty or larger than 5 MB.")
+
+    try:
+        with PILImage.open(BytesIO(signature_bytes)) as source_image:
+            source_image.verify()
+
+        with PILImage.open(BytesIO(signature_bytes)) as source_image:
+            source_image = ImageOps.exif_transpose(source_image)
+
+            if source_image.width < 80 or source_image.height < 20:
+                raise ValueError("The signature image is too small.")
+
+            # Flatten transparency onto white so the signature renders
+            # consistently in PDF viewers and email attachments.
+            rgba_image = source_image.convert("RGBA")
+            white_background = PILImage.new(
+                "RGBA",
+                rgba_image.size,
+                (255, 255, 255, 255),
+            )
+            white_background.alpha_composite(rgba_image)
+            final_image = white_background.convert("RGB")
+
+            final_image.thumbnail((1600, 600))
+
+            output = BytesIO()
+            final_image.save(
+                output,
+                format="PNG",
+                optimize=True,
+            )
+
+    except (UnidentifiedImageError, OSError, ValueError) as error:
+        raise ValueError("The uploaded signature is not a valid image.") from error
+
+    return output.getvalue()
+
+
+def build_signature_pdf_image(signature_bytes):
+    """Return a proportionally scaled ReportLab image for the signature."""
+
+    with PILImage.open(BytesIO(signature_bytes)) as signature_image:
+        image_width, image_height = signature_image.size
+
+    max_width = 3.25 * inch
+    max_height = 0.9 * inch
+    scale = min(
+        max_width / image_width,
+        max_height / image_height,
+    )
+
+    return ReportLabImage(
+        BytesIO(signature_bytes),
+        width=image_width * scale,
+        height=image_height * scale,
+    )
 
 
 def format_form_value(value):
@@ -3034,8 +3893,20 @@ def format_form_value(value):
     return str(value).strip()
 
 
-def create_completed_form_pdf(form_key, values, language, reference):
-    """Generate a non-editable review copy from the completed online form."""
+def create_completed_form_pdf(
+    form_key,
+    values,
+    language,
+    reference,
+    signature_bytes,
+    signature_date,
+):
+    """
+    Generate a non-editable review copy from the completed online form.
+
+    The applicant's scanned signature and selected signing date are
+    embedded in the PDF that is downloaded or emailed to IRD.
+    """
 
     definition = FORM_DEFINITIONS[form_key]
     form_title = get_form_title(form_key, language)
@@ -3102,7 +3973,74 @@ def create_completed_form_pdf(form_key, values, language, reference):
         "Departamento de Rentas Internas. Este documento es para revisión y no demuestra aprobación."
     )
     story.append(Paragraph(certification, styles["AIDASmall"]))
-    document.build(story, onFirstPage=add_pdf_footer, onLaterPages=add_pdf_footer)
+    story.append(Spacer(1, 0.18 * inch))
+
+    signature_label = (
+        "Scanned signature" if language == "en" else "Firma escaneada"
+    )
+    date_label = (
+        "Date signed" if language == "en" else "Fecha de firma"
+    )
+    signature_note = (
+        "Signature supplied by the applicant through the secure form workspace."
+        if language == "en"
+        else "Firma proporcionada por el solicitante mediante el formulario seguro."
+    )
+
+    signature_image = build_signature_pdf_image(signature_bytes)
+    signature_date_text = format_form_value(signature_date)
+
+    signature_table = Table(
+        [
+            [
+                Paragraph(
+                    f"<b>{signature_label}</b>",
+                    styles["AIDABody"],
+                ),
+                Paragraph(
+                    f"<b>{date_label}</b>",
+                    styles["AIDABody"],
+                ),
+            ],
+            [
+                signature_image,
+                Paragraph(
+                    html.escape(signature_date_text),
+                    styles["AIDABody"],
+                ),
+            ],
+            [
+                Paragraph(
+                    signature_note,
+                    styles["AIDASmall"],
+                ),
+                "",
+            ],
+        ],
+        colWidths=[4.7 * inch, 2.4 * inch],
+        hAlign="LEFT",
+    )
+    signature_table.setStyle(
+        TableStyle(
+            [
+                ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+                ("GRID", (0, 0), (-1, 1), 0.5, colors.HexColor("#c5e6d1")),
+                ("BACKGROUND", (0, 0), (-1, 0), PDF_LIGHT_GREEN),
+                ("LEFTPADDING", (0, 0), (-1, -1), 8),
+                ("RIGHTPADDING", (0, 0), (-1, -1), 8),
+                ("TOPPADDING", (0, 0), (-1, -1), 7),
+                ("BOTTOMPADDING", (0, 0), (-1, -1), 7),
+                ("SPAN", (0, 2), (1, 2)),
+            ]
+        )
+    )
+    story.append(signature_table)
+
+    document.build(
+        story,
+        onFirstPage=add_pdf_footer,
+        onLaterPages=add_pdf_footer,
+    )
     return buffer.getvalue()
 
 
@@ -3218,6 +4156,759 @@ def send_pdf_to_ird(pdf_bytes, filename, form_title, reference, reply_email):
         server.send_message(message)
 
 
+
+# ---------------------------------------------------------
+# After-hours escalation detection, storage and follow-up
+# ---------------------------------------------------------
+
+ESCALATION_CSV_FIELDS = [
+    "reference",
+    "submitted_at_anguilla",
+    "submitted_at_utc",
+    "title",
+    "full_name",
+    "phone",
+    "email",
+    "service_key",
+    "service_label",
+    "preferred_contact",
+    "reason",
+    "language",
+]
+
+
+def get_escalation_text():
+    """Return escalation wording in the selected conversation language."""
+
+    language = st.session_state.language or "en"
+    return ESCALATION_TEXT[language]
+
+
+def parse_clock_time(value, fallback):
+    """Parse an HH:MM setting without allowing an invalid value to break the app."""
+
+    try:
+        return datetime.strptime(value.strip(), "%H:%M").time()
+    except (TypeError, ValueError, AttributeError):
+        return datetime.strptime(fallback, "%H:%M").time()
+
+
+def get_ird_timezone():
+    """Return the configured Anguilla timezone with a safe fallback."""
+
+    try:
+        return ZoneInfo(ird_timezone_name)
+    except Exception:
+        return ZoneInfo(DEFAULT_IRD_TIMEZONE)
+
+
+def get_ird_closed_dates():
+    """
+    Return optional public-holiday or exceptional closure dates.
+
+    Configure IRD_CLOSED_DATES as comma-separated YYYY-MM-DD values.
+    """
+
+    closed_dates = set()
+    for raw_date in ird_closed_dates_text.split(","):
+        value = raw_date.strip()
+        if not value:
+            continue
+        try:
+            closed_dates.add(datetime.strptime(value, "%Y-%m-%d").date())
+        except ValueError:
+            continue
+    return closed_dates
+
+
+def get_anguilla_now():
+    """Return the current date and time in Anguilla."""
+
+    return datetime.now(get_ird_timezone())
+
+
+def is_ird_office_open(now=None):
+    """
+    Return True only during configured regular IRD working hours.
+
+    Monday-Friday are treated as working days. Dates listed in
+    IRD_CLOSED_DATES are treated as closed.
+    """
+
+    local_now = now or get_anguilla_now()
+    if local_now.tzinfo is None:
+        local_now = local_now.replace(tzinfo=get_ird_timezone())
+    else:
+        local_now = local_now.astimezone(get_ird_timezone())
+
+    if local_now.weekday() >= 5:
+        return False
+
+    if local_now.date() in get_ird_closed_dates():
+        return False
+
+    opens_at = parse_clock_time(
+        ird_open_time_text,
+        DEFAULT_IRD_OPEN_TIME,
+    )
+    closes_at = parse_clock_time(
+        ird_close_time_text,
+        DEFAULT_IRD_CLOSE_TIME,
+    )
+
+    current_time = local_now.time().replace(tzinfo=None)
+    return opens_at <= current_time < closes_at
+
+
+def normalise_for_intent_detection(text):
+    """Normalise conversational text for deterministic intent matching."""
+
+    cleaned = (text or "").lower()
+    cleaned = re.sub(r"[^a-z0-9áéíóúüñ' -]", " ", cleaned)
+    return re.sub(r"\s+", " ", cleaned).strip()
+
+
+def infer_escalation_service(question):
+    """Suggest the most relevant service area from the user's wording."""
+
+    text = normalise_for_intent_detection(question)
+
+    service_rules = [
+        ("portal", [
+            "portal", "login", "log in", "password reset", "locked out",
+            "online account", "cuenta en línea", "iniciar sesión"
+        ]),
+        ("gst", [
+            "general services tax", "goods and services tax", "gst",
+            "impuesto general sobre servicios"
+        ]),
+        ("usl", [
+            "universal social levy", "usl", "gravamen social universal"
+        ]),
+        ("property", [
+            "property tax", "property valuation", "land tax",
+            "impuesto sobre la propiedad", "valoración"
+        ]),
+        ("business", [
+            "business licence", "business license", "licencia comercial"
+        ]),
+        ("liquor", [
+            "liquor licence", "liquor license", "licencia de bebidas"
+        ]),
+        ("vehicle", [
+            "vehicle licence", "vehicle license", "driver's licence",
+            "driver licence", "vehicle registration", "licencia de vehículo",
+            "licencia de conducir", "registro de vehículo"
+        ]),
+        ("clearance", [
+            "tax clearance", "good standing", "solvencia tributaria"
+        ]),
+        ("payments", [
+            "pay my", "make a payment", "pay now", "settle my", "payment issue",
+            "payment problem", "where can i pay", "quiero pagar", "hacer un pago"
+        ]),
+        ("compliance", [
+            "audit", "appeal", "objection", "dispute", "investigation",
+            "penalty review", "auditoría", "apelación", "objeción", "disputa"
+        ]),
+    ]
+
+    for service_key, phrases in service_rules:
+        if any(phrase in text for phrase in phrases):
+            return service_key
+
+    return "general"
+
+
+def detect_escalation_request(question):
+    """
+    Detect requests that need direct staff contact rather than an automated action.
+
+    This covers payment intentions, requests for an officer or unit, account-
+    specific matters and service problems that A.I.D.A. cannot complete.
+    """
+
+    text = normalise_for_intent_detection(question)
+    if not text:
+        return None
+
+    direct_contact_phrases = [
+        "speak to someone", "speak with someone", "speak to an officer",
+        "talk to someone", "talk to an officer", "contact an officer",
+        "contact the department", "contact ird", "call ird", "call the office",
+        "human agent", "staff member", "representative", "particular unit",
+        "specific unit", "which unit", "who do i call", "who should i call",
+        "how do i contact", "need someone to call me", "call me back",
+        "hablar con alguien", "hablar con un funcionario", "contactar al ird",
+        "llamar al ird", "que me llamen", "qué unidad"
+    ]
+
+    payment_action_phrases = [
+        "i want to pay", "i need to pay", "pay my tax", "pay my taxes",
+        "make a tax payment", "make a payment", "pay now", "settle my tax",
+        "where can i pay", "quiero pagar", "necesito pagar", "hacer un pago",
+        "pagar mis impuestos"
+    ]
+
+    account_specific_phrases = [
+        "my tax balance", "my exact balance", "my account balance",
+        "my payment history", "my refund status", "my application status",
+        "my licence status", "my license status", "my tax account",
+        "my assessment", "my audit", "my dispute", "my appeal",
+        "saldo de mi cuenta", "estado de mi reembolso",
+        "estado de mi solicitud", "mi cuenta tributaria"
+    ]
+
+    issue_words = [
+        "cannot", "can't", "unable", "not working", "problem", "issue",
+        "error", "failed", "locked out", "stuck", "need help",
+        "no puedo", "problema", "error", "no funciona", "necesito ayuda"
+    ]
+    service_words = [
+        "portal", "account", "payment", "tax", "return", "licence", "license",
+        "form", "registration", "application", "refund", "assessment",
+        "cuenta", "pago", "impuesto", "declaración", "licencia", "formulario",
+        "registro", "solicitud", "reembolso"
+    ]
+
+    official_action_phrases = [
+        "approve my", "process my", "complete my payment", "access my account",
+        "change my account", "confirm my balance", "verify my identity",
+        "aprobar mi", "procesar mi", "acceder a mi cuenta"
+    ]
+
+    contact_detail_phrases = [
+        "phone number", "telephone number", "email address",
+        "contact number", "office hours", "your number", "your email",
+        "número de teléfono", "correo electrónico", "horario de oficina"
+    ]
+    ird_identity_phrases = [
+        "ird", "inland revenue", "department", "departamento",
+        "rentas internas"
+    ]
+    asks_for_official_contact = (
+        any(phrase in text for phrase in contact_detail_phrases)
+        and any(phrase in text for phrase in ird_identity_phrases)
+    )
+
+    needs_staff = (
+        asks_for_official_contact
+        or
+        any(phrase in text for phrase in direct_contact_phrases)
+        or any(phrase in text for phrase in payment_action_phrases)
+        or any(phrase in text for phrase in account_specific_phrases)
+        or any(phrase in text for phrase in official_action_phrases)
+        or (
+            any(word in text for word in issue_words)
+            and any(word in text for word in service_words)
+        )
+    )
+
+    if not needs_staff:
+        return None
+
+    return {
+        "service_key": infer_escalation_service(question),
+    }
+
+
+def append_escalation_guidance(answer):
+    """Add a short spoken and written hand-off sentence to an escalation answer."""
+
+    text = get_escalation_text()
+    guidance = (
+        text["speech_open"]
+        if is_ird_office_open()
+        else text["speech_closed"]
+    )
+    return f"{answer.rstrip()}\n\n{guidance}"
+
+
+def is_valid_phone(phone_number):
+    """Perform a conservative telephone-number validation."""
+
+    value = (phone_number or "").strip()
+    return bool(
+        7 <= len(value) <= 25
+        and re.fullmatch(r"[0-9+() .-]+", value)
+        and len(re.sub(r"\D", "", value)) >= 7
+    )
+
+
+def spreadsheet_safe_value(value):
+    """
+    Prevent a submitted value from becoming a spreadsheet formula.
+
+    This protection is used for the local CSV. The supplied Google Apps
+    Script applies the same protection before appending to a sheet.
+    """
+
+    text = "" if value is None else str(value).strip()
+    if text.startswith(("=", "+", "-", "@")):
+        return "'" + text
+    return text
+
+
+def save_escalation_to_local_csv(record):
+    """Append one request to the local staff CSV with a stable header."""
+
+    file_exists = ESCALATION_REQUEST_FILE.exists()
+    ESCALATION_REQUEST_FILE.parent.mkdir(parents=True, exist_ok=True)
+
+    safe_record = {
+        field: spreadsheet_safe_value(record.get(field, ""))
+        for field in ESCALATION_CSV_FIELDS
+    }
+
+    with ESCALATION_REQUEST_FILE.open(
+        "a",
+        encoding="utf-8-sig",
+        newline="",
+    ) as csv_file:
+        writer = csv.DictWriter(
+            csv_file,
+            fieldnames=ESCALATION_CSV_FIELDS,
+        )
+        if not file_exists or ESCALATION_REQUEST_FILE.stat().st_size == 0:
+            writer.writeheader()
+        writer.writerow(safe_record)
+
+
+def save_escalation_to_google_sheet(record):
+    """
+    Send one request to the configured Google Apps Script web app.
+
+    The web app appends it to a Google Sheet accessible to authorised IRD
+    staff. A shared token may be configured to reject unrelated submissions.
+    """
+
+    if not escalation_sheet_webhook_url:
+        return False
+
+    payload = dict(record)
+    if escalation_sheet_webhook_token:
+        payload["webhook_token"] = escalation_sheet_webhook_token
+
+    response = requests.post(
+        escalation_sheet_webhook_url,
+        json=payload,
+        timeout=20,
+    )
+    response.raise_for_status()
+
+    try:
+        response_payload = response.json()
+    except ValueError:
+        response_payload = {}
+
+    if response_payload and response_payload.get("ok") is False:
+        raise RuntimeError("The escalation sheet rejected the request.")
+
+    return True
+
+
+def send_escalation_email_notification(record):
+    """Optionally notify the configured IRD mailbox of a saved request."""
+
+    if not (
+        smtp_host
+        and smtp_from_email
+        and ird_escalation_recipient
+    ):
+        return False
+
+    message = EmailMessage()
+    message["Subject"] = (
+        "A.I.D.A. after-hours follow-up request - "
+        f"{record['service_label']} - {record['reference']}"
+    )
+    message["From"] = smtp_from_email
+    message["To"] = ird_escalation_recipient
+    message["Reply-To"] = record["email"]
+    message.set_content(
+        "An after-hours follow-up request was submitted through A.I.D.A.\n\n"
+        f"Reference: {record['reference']}\n"
+        f"Submitted in Anguilla: {record['submitted_at_anguilla']}\n"
+        f"Title: {record['title']}\n"
+        f"Full name: {record['full_name']}\n"
+        f"Phone: {record['phone']}\n"
+        f"Email: {record['email']}\n"
+        f"Service or unit: {record['service_label']}\n"
+        f"Preferred contact: {record['preferred_contact']}\n"
+        f"Reason: {record['reason']}\n\n"
+        "Do not reply with private taxpayer information unless identity has "
+        "been verified through an approved IRD process."
+    )
+
+    if smtp_use_ssl or smtp_port == 465:
+        context = ssl.create_default_context()
+        with smtplib.SMTP_SSL(
+            smtp_host,
+            smtp_port,
+            context=context,
+            timeout=30,
+        ) as server:
+            if smtp_username:
+                server.login(smtp_username, smtp_password)
+            server.send_message(message)
+        return True
+
+    with smtplib.SMTP(smtp_host, smtp_port, timeout=30) as server:
+        server.ehlo()
+        if smtp_use_tls:
+            context = ssl.create_default_context()
+            server.starttls(context=context)
+            server.ehlo()
+        if smtp_username:
+            server.login(smtp_username, smtp_password)
+        server.send_message(message)
+
+    return True
+
+
+def store_escalation_request(record):
+    """
+    Store one request in the configured staff source.
+
+    A Google Sheet is preferred when configured. A local CSV copy is saved
+    when requested, and it is also used automatically as a fallback if the
+    sheet is unavailable.
+    """
+
+    sheet_saved = False
+    sheet_error = None
+
+    if escalation_sheet_webhook_url:
+        try:
+            sheet_saved = save_escalation_to_google_sheet(record)
+        except Exception as error:
+            sheet_error = error
+
+    local_saved = False
+    if escalation_save_local_copy or not sheet_saved:
+        save_escalation_to_local_csv(record)
+        local_saved = True
+
+    if not sheet_saved and not local_saved:
+        if sheet_error:
+            raise sheet_error
+        raise RuntimeError("No escalation storage destination is configured.")
+
+    # Email is a notification only. The saved sheet/CSV remains the record.
+    try:
+        send_escalation_email_notification(record)
+    except Exception:
+        pass
+
+    return {
+        "sheet_saved": sheet_saved,
+        "local_saved": local_saved,
+    }
+
+
+def build_escalation_reference():
+    """Create a traceable follow-up reference."""
+
+    timestamp = datetime.now(timezone.utc).strftime("%Y%m%d-%H%M%S")
+    return (
+        f"AIDA-CALL-{st.session_state.active_chat_id}-"
+        f"{timestamp}"
+    )
+
+
+def clear_active_escalation_state(
+    dismiss_source=False,
+    preserve_notice=False,
+):
+    """Remove the active contact form and all temporary personal values."""
+
+    source_index = st.session_state.active_escalation_source_index
+    if dismiss_source and source_index is not None:
+        st.session_state.dismissed_escalation_messages.add(source_index)
+
+    st.session_state.active_escalation_request = None
+    st.session_state.active_escalation_source_index = None
+    st.session_state.active_escalation_instance_id += 1
+
+    if not preserve_notice:
+        st.session_state.escalation_completion_notice = None
+
+
+def open_escalation_form(escalation_request, source_message_index):
+    """Open one fresh after-hours request form."""
+
+    clear_active_form_state(dismiss_source=False)
+    clear_active_escalation_state(dismiss_source=False)
+
+    st.session_state.active_escalation_request = dict(
+        escalation_request or {}
+    )
+    st.session_state.active_escalation_source_index = source_message_index
+
+
+def render_ird_contact_details(text):
+    """Show the current public IRD contact information."""
+
+    hours_label = (
+        ird_office_hours_label_es
+        if (st.session_state.language or "en") == "es"
+        else ird_office_hours_label
+    )
+
+    st.markdown(
+        f"**{text['phone']}:** {html.escape(ird_contact_phone)}  \n"
+        f"**{text['email']}:** {html.escape(ird_contact_email)}  \n"
+        f"**{text['location']}:** {html.escape(ird_contact_location)}  \n"
+        f"**{text['hours']}:** {html.escape(hours_label)}"
+    )
+
+
+def render_escalation_resource(message, message_index):
+    """
+    Show direct contact details in working hours or an after-hours form option.
+
+    The form is never offered while the office is open.
+    """
+
+    request = message.get("escalation_request")
+    if not request:
+        return
+
+    if message_index in st.session_state.dismissed_escalation_messages:
+        return
+
+    text = get_escalation_text()
+    chat_id = st.session_state.active_chat_id
+    office_is_open = is_ird_office_open()
+
+    st.markdown(
+        (
+            '<div class="resource-card">'
+            f'<div class="resource-card-title">{text["card_title"]}</div>'
+            f'{text["open_intro"] if office_is_open else text["closed_intro"]}'
+            '</div>'
+        ),
+        unsafe_allow_html=True,
+    )
+    render_ird_contact_details(text)
+
+    if office_is_open:
+        return
+
+    if st.session_state.active_escalation_source_index == message_index:
+        st.caption(text["request_open"])
+        return
+
+    if st.button(
+        text["request_button"],
+        key=f"open_escalation_{chat_id}_{message_index}",
+        use_container_width=True,
+    ):
+        open_escalation_form(request, message_index)
+        st.rerun()
+
+
+def render_escalation_completion_notice():
+    """Show a short result after personal form values have been removed."""
+
+    notice = st.session_state.escalation_completion_notice
+    if not notice:
+        return
+
+    text = get_escalation_text()
+    st.divider()
+    with st.container(border=True):
+        if notice.get("status") == "saved":
+            st.success(text["success"])
+            st.caption(
+                f"{text['reference']}: {notice.get('reference', '')}"
+            )
+        else:
+            st.error(text["save_error"])
+
+
+def render_active_escalation_workspace():
+    """Display one after-hours callback form beneath the conversation."""
+
+    request = st.session_state.active_escalation_request
+    if not request:
+        return
+
+    text = get_escalation_text()
+    language = st.session_state.language or "en"
+
+    # The callback form is not shown while staff can be contacted directly.
+    if is_ird_office_open():
+        clear_active_escalation_state(dismiss_source=False)
+        st.info(text["office_opened"])
+        return
+
+    instance_id = st.session_state.active_escalation_instance_id
+    service_options = text["service_options"]
+    service_keys = list(service_options.keys())
+    suggested_service = request.get("service_key", "general")
+    if suggested_service not in service_keys:
+        suggested_service = "general"
+    default_service_index = service_keys.index(suggested_service)
+
+    st.divider()
+    with st.container(
+        border=True,
+        key=(
+            f"active_escalation_workspace_"
+            f"{st.session_state.active_chat_id}_{instance_id}"
+        ),
+    ):
+        title_column, close_column = st.columns([4, 1])
+
+        with title_column:
+            st.markdown(
+                f'<div class="form-workspace-title">{text["form_title"]}</div>',
+                unsafe_allow_html=True,
+            )
+
+        with close_column:
+            if st.button(
+                "✕",
+                key=(
+                    f"close_escalation_top_"
+                    f"{st.session_state.active_chat_id}_{instance_id}"
+                ),
+                help=text["close"],
+                use_container_width=True,
+            ):
+                clear_active_escalation_state(dismiss_source=True)
+                st.rerun()
+
+        st.info(text["form_intro"])
+        st.warning(text["privacy"])
+
+        with st.form(
+            key=(
+                f"after_hours_escalation_form_"
+                f"{st.session_state.active_chat_id}_{instance_id}"
+            )
+        ):
+            selected_title = st.selectbox(
+                f"{text['title']} *",
+                ["", *text["title_options"]],
+            )
+            full_name = st.text_input(
+                f"{text['full_name']} *",
+                max_chars=120,
+            )
+            phone_number = st.text_input(
+                f"{text['phone_number']} *",
+                max_chars=25,
+            )
+            email_address = st.text_input(
+                f"{text['email_address']} *",
+                max_chars=180,
+            )
+
+            selected_service_label = st.selectbox(
+                f"{text['service']} *",
+                [service_options[key] for key in service_keys],
+                index=default_service_index,
+            )
+            selected_service_key = service_keys[
+                [service_options[key] for key in service_keys].index(
+                    selected_service_label
+                )
+            ]
+
+            reason = st.text_area(
+                f"{text['reason']} *",
+                help=text["reason_help"],
+                max_chars=1000,
+                height=110,
+            )
+            preferred_contact = st.selectbox(
+                f"{text['preferred_contact']} *",
+                text["preferred_options"],
+            )
+            consent = st.checkbox(text["consent"])
+
+            submitted = st.form_submit_button(
+                text["submit"],
+                use_container_width=True,
+            )
+
+        if submitted:
+            required_values = [
+                selected_title,
+                full_name.strip(),
+                phone_number.strip(),
+                email_address.strip(),
+                selected_service_label,
+                reason.strip(),
+                preferred_contact,
+            ]
+
+            if not all(required_values):
+                st.error(text["required"])
+            elif not is_valid_phone(phone_number):
+                st.error(text["invalid_phone"])
+            elif not is_valid_email(email_address):
+                st.error(text["invalid_email"])
+            elif not consent:
+                st.error(text["consent_required"])
+            else:
+                reference = build_escalation_reference()
+                local_now = get_anguilla_now()
+
+                record = {
+                    "reference": reference,
+                    "submitted_at_anguilla": (
+                        local_now.strftime("%Y-%m-%d %H:%M:%S %Z")
+                    ),
+                    "submitted_at_utc": (
+                        datetime.now(timezone.utc)
+                        .strftime("%Y-%m-%d %H:%M:%S UTC")
+                    ),
+                    "title": selected_title,
+                    "full_name": full_name.strip(),
+                    "phone": phone_number.strip(),
+                    "email": email_address.strip(),
+                    "service_key": selected_service_key,
+                    "service_label": selected_service_label,
+                    "preferred_contact": preferred_contact,
+                    "reason": reason.strip(),
+                    "language": language,
+                }
+
+                try:
+                    store_escalation_request(record)
+                except Exception:
+                    st.session_state.escalation_completion_notice = {
+                        "status": "failed",
+                        "reference": reference,
+                    }
+                else:
+                    st.session_state.escalation_completion_notice = {
+                        "status": "saved",
+                        "reference": reference,
+                    }
+
+                # Remove all personal widget values immediately after submission.
+                clear_active_escalation_state(
+                    dismiss_source=True,
+                    preserve_notice=True,
+                )
+                st.rerun()
+
+        if st.button(
+            text["close"],
+            key=(
+                f"close_escalation_bottom_"
+                f"{st.session_state.active_chat_id}_{instance_id}"
+            ),
+            use_container_width=True,
+        ):
+            clear_active_escalation_state(dismiss_source=True)
+            st.rerun()
+
+
 def build_submission_reference(form_key):
     """Create a traceable reference without exposing form contents."""
 
@@ -3237,6 +4928,11 @@ def clear_active_form_state(dismiss_source=False, preserve_notice=False):
     st.session_state.active_form_source_index = None
     st.session_state.completed_form_document = None
     st.session_state.form_submission_message = None
+    st.session_state.active_escalation_request = None
+    st.session_state.active_escalation_source_index = None
+    st.session_state.active_escalation_instance_id += 1
+    st.session_state.dismissed_escalation_messages = set()
+    st.session_state.escalation_completion_notice = None
     st.session_state.active_form_instance_id += 1
 
     if not preserve_notice:
@@ -3246,6 +4942,7 @@ def clear_active_form_state(dismiss_source=False, preserve_notice=False):
 def open_digital_form(form_key, source_message_index):
     """Open one fresh form workspace and remember which answer opened it."""
 
+    clear_active_escalation_state(dismiss_source=False)
     clear_active_form_state(dismiss_source=False)
     st.session_state.active_form_key = form_key
     st.session_state.active_form_source_index = source_message_index
@@ -3562,7 +5259,54 @@ def render_active_form_workspace():
         ):
             values = {}
             for field in definition["fields"]:
-                values[field["key"]] = render_form_field(field, form_key, language)
+                values[field["key"]] = render_form_field(
+                    field,
+                    form_key,
+                    language,
+                )
+
+            st.markdown("---")
+            st.markdown(f"**{resource_text['signature_upload']}***")
+            st.caption(resource_text["signature_help"])
+
+            uploaded_signature = st.file_uploader(
+                resource_text["signature_upload"],
+                type=["png", "jpg", "jpeg"],
+                accept_multiple_files=False,
+                key=(
+                    f"signature_upload_{st.session_state.active_chat_id}_"
+                    f"{instance_id}_{form_key}"
+                ),
+                label_visibility="collapsed",
+            )
+
+            signature_bytes = None
+            signature_error = None
+
+            if uploaded_signature is not None:
+                try:
+                    signature_bytes = normalise_signature_image(
+                        uploaded_signature
+                    )
+                except ValueError:
+                    signature_error = resource_text["invalid_signature"]
+                else:
+                    st.caption(resource_text["signature_preview"])
+                    st.image(
+                        signature_bytes,
+                        width=320,
+                    )
+
+            signature_date = st.date_input(
+                f"{resource_text['signature_date']} *",
+                value=None,
+                key=(
+                    f"signature_date_{st.session_state.active_chat_id}_"
+                    f"{instance_id}_{form_key}"
+                ),
+            )
+
+            st.caption(resource_text["signature_privacy"])
 
             consent = st.checkbox(
                 resource_text["consent"],
@@ -3579,6 +5323,10 @@ def render_active_form_workspace():
 
             if missing_fields:
                 st.error(resource_text["required_fields"])
+            elif signature_error:
+                st.error(signature_error)
+            elif signature_bytes is None or signature_date is None:
+                st.error(resource_text["signature_required"])
             elif not is_valid_email(reply_email):
                 st.error(resource_text["invalid_email"])
             elif not consent:
@@ -3590,6 +5338,8 @@ def render_active_form_workspace():
                     values,
                     language,
                     reference,
+                    signature_bytes,
+                    signature_date,
                 )
                 filename = f"{reference}_{safe_name}.pdf"
                 status = "sent"
@@ -3632,7 +5382,8 @@ def render_active_form_workspace():
 def build_assistant_message(
     content,
     allow_feedback=False,
-    resource_request=None
+    resource_request=None,
+    escalation_request=None
 ):
     """
     Prepare an assistant message and its optional audio.
@@ -3666,7 +5417,8 @@ def build_assistant_message(
         "feedback_helpful": None,
         "feedback_rating": None,
         "feedback_comment": "",
-        "resource_request": resource_request
+        "resource_request": resource_request,
+        "escalation_request": escalation_request
     }
 
 
@@ -3694,6 +5446,11 @@ def start_new_conversation():
     st.session_state.form_completion_notice = None
     st.session_state.completed_form_document = None
     st.session_state.form_submission_message = None
+    st.session_state.active_escalation_request = None
+    st.session_state.active_escalation_source_index = None
+    st.session_state.active_escalation_instance_id += 1
+    st.session_state.dismissed_escalation_messages = set()
+    st.session_state.escalation_completion_notice = None
 
 
 def archive_current_conversation():
@@ -3766,6 +5523,11 @@ def restore_saved_chat(history_index):
     st.session_state.form_completion_notice = None
     st.session_state.completed_form_document = None
     st.session_state.form_submission_message = None
+    st.session_state.active_escalation_request = None
+    st.session_state.active_escalation_source_index = None
+    st.session_state.active_escalation_instance_id += 1
+    st.session_state.dismissed_escalation_messages = set()
+    st.session_state.escalation_completion_notice = None
 
 
 def get_end_chat_survey_text():
@@ -3935,6 +5697,9 @@ with centre_column:
 
 st.title("🧾 A.I.D.A.")
 
+# The admin route remains available even before a public language is selected.
+render_staff_admin_panel()
+
 
 # ---------------------------------------------------------
 # Ask the user to choose a language first
@@ -4031,6 +5796,11 @@ if st.sidebar.button(
     st.session_state.form_completion_notice = None
     st.session_state.completed_form_document = None
     st.session_state.form_submission_message = None
+    st.session_state.active_escalation_request = None
+    st.session_state.active_escalation_source_index = None
+    st.session_state.active_escalation_instance_id += 1
+    st.session_state.dismissed_escalation_messages = set()
+    st.session_state.escalation_completion_notice = None
 
     st.rerun()
 
@@ -4188,6 +5958,11 @@ def display_chat_message(
                 message_index
             )
 
+            render_escalation_resource(
+                message,
+                message_index
+            )
+
             # Conversation feedback is collected once
             # after the user chooses to end the chat.
 
@@ -4254,6 +6029,8 @@ with chat_messages_container:
 
 render_active_form_workspace()
 render_form_completion_notice()
+render_active_escalation_workspace()
+render_escalation_completion_notice()
 
 
 # ---------------------------------------------------------
@@ -4280,6 +6057,7 @@ if (
         use_container_width=True
     ):
         clear_active_form_state(dismiss_source=True)
+        clear_active_escalation_state(dismiss_source=True)
         st.session_state.chat_ended = True
         st.rerun()
 
@@ -4373,9 +6151,10 @@ if user_question:
     cleaned_question = user_question.strip()
 
     if cleaned_question:
-        # A form belongs only to the question that opened it. Moving on to a
-        # new question removes the form, its downloads and any old result card.
+        # A form or after-hours contact request belongs only to the question
+        # that opened it. A new question immediately removes temporary values.
         clear_active_form_state(dismiss_source=True)
+        clear_active_escalation_state(dismiss_source=True)
 
         user_message = {
             "role": "user",
@@ -4411,12 +6190,19 @@ if user_question:
         resource_request = detect_resource_request(
             cleaned_question
         )
+        escalation_request = detect_escalation_request(
+            cleaned_question
+        )
+
+        if escalation_request:
+            answer = append_escalation_guidance(answer)
 
         assistant_message = (
             build_assistant_message(
                 answer,
                 allow_feedback=False,
-                resource_request=resource_request
+                resource_request=resource_request,
+                escalation_request=escalation_request
             )
         )
 
@@ -4439,3 +6225,4 @@ if user_question:
         # Run the page again so the End chat button appears
         # immediately beneath the completed response.
         st.rerun()
+        
