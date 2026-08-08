@@ -1,0 +1,21 @@
+{
+  "queue": [],
+  "active_sessions": {
+    "59fbfb33": {
+      "messages": [
+        {
+          "role": "assistant",
+          "content": "An IRD Admin representative has joined the chat. How can I assist you today?"
+        }
+      ]
+    },
+    "40ef9c09": {
+      "messages": [
+        {
+          "role": "assistant",
+          "content": "An IRD Admin representative has joined the chat. How can I assist you today?"
+        }
+      ]
+    }
+  }
+}
