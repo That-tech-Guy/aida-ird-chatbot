@@ -26,7 +26,7 @@ const notificationBadge = document.getElementById(
 );
 
 const INACTIVITY_WARNING_MS = 30 * 1000;
-const DISCONNECT_COUNTDOWN_MS = 60 * 1000;
+const DISCONNECT_COUNTDOWN_MS = 3 * 60 * 1000;
 
 let waitingForReply = false;
 let conversationHistory = [];
