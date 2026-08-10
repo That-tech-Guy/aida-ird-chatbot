@@ -12,6 +12,7 @@ This Flask application:
 
 import base64
 import csv
+import hashlib
 import html
 import io
 import json
@@ -20,6 +21,7 @@ import re
 import threading
 import tomllib
 import wave
+from collections import OrderedDict
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
@@ -27,6 +29,16 @@ from typing import Any
 from flask import Flask, Response, jsonify, render_template, request, url_for
 from google import genai
 from google.genai import types
+
+from admin_portal import admin_bp, log_analytics_entry
+from aida_persistence import (
+    configured as supabase_configured,
+    sync_managed_content,
+)
+from privacy_guard import (
+    redact_history,
+    redact_private_text,
+)
 
 
 # ---------------------------------------------------------
@@ -90,6 +102,17 @@ SURVEY_RESULTS_FILE = (
 )
 
 SURVEY_WRITE_LOCK = threading.Lock()
+
+# Small process-local cache for recently generated Gemini speech.
+# This does not persist private content to disk and is cleared when
+# the Flask process restarts.
+SPEECH_AUDIO_CACHE: OrderedDict[
+    str,
+    tuple[bytes, str],
+] = OrderedDict()
+
+SPEECH_AUDIO_CACHE_LOCK = threading.Lock()
+MAX_SPEECH_CACHE_ITEMS = 32
 
 DEFAULT_GEMINI_MODEL = "gemini-3.1-flash-lite"
 DEFAULT_GEMINI_TTS_MODEL = "gemini-3.1-flash-tts-preview"
@@ -171,6 +194,38 @@ ANGUILLA_SPOKEN_NAME = get_secret(
     "Anguilla",
 )
 
+ADMIN_PASSWORD = get_secret(
+    "ADMIN_PASSWORD",
+    "",
+)
+
+FLASK_SECRET_KEY = get_secret(
+    "FLASK_SECRET_KEY",
+    "",
+)
+
+# Staff access is configured through local secrets or Render environment
+# variables. Never hard-code the admin password in the repository.
+app.config["AIDA_ADMIN_PASSWORD"] = ADMIN_PASSWORD
+app.secret_key = (
+    FLASK_SECRET_KEY.encode("utf-8")
+    if FLASK_SECRET_KEY
+    else os.urandom(32)
+)
+app.config["SESSION_COOKIE_HTTPONLY"] = True
+app.config["SESSION_COOKIE_SAMESITE"] = "Lax"
+
+app.register_blueprint(admin_bp)
+
+# Render's filesystem is ephemeral. When optional Supabase persistence is
+# configured, restore staff-managed content before the chatbot loads it.
+try:
+    sync_managed_content(APP_FOLDER)
+except Exception:
+    app.logger.exception(
+        "Managed content could not be restored from Supabase."
+    )
+
 
 # ---------------------------------------------------------
 # Required content
@@ -245,6 +300,15 @@ WEB_KNOWLEDGE_ADDITIONS = read_optional_text(
 FORMS_CATALOG = load_forms_catalog()
 
 
+def get_current_forms_catalog() -> list[dict[str, Any]]:
+    """Read the latest admin-saved forms catalogue with safe fallback."""
+
+    try:
+        return load_forms_catalog()
+    except (OSError, FileNotFoundError, ValueError, json.JSONDecodeError):
+        return FORMS_CATALOG
+
+
 SYSTEM_INSTRUCTION = f"""
 {MASTER_PROMPT}
 
@@ -267,7 +331,69 @@ IMPORTANT RESPONSE RULES
 3. If a fact cannot be verified, say that clearly and direct the visitor
    to the Inland Revenue Department.
 4. Never request passwords, bank details, card details or security codes.
-5. Respond in English or Spanish according to the visitor's language.
+5. Respond in the conversation language selected by the visitor:
+   English, Spanish or Simplified Chinese.
+6. Keep the response suitable for a website chat window.
+7. Use Markdown structure:
+   - Use **short bold headings** for sections.
+   - Use bullet points whenever listing steps, services, forms,
+     documents, fees, deadlines or requirements.
+   - Use numbered steps for an ordered process.
+   - Avoid one long unbroken paragraph.
+8. When a form is relevant, explain what the form is for, but do not
+   manually invent a form link. The website will attach official and
+   fillable-form buttons from the verified form catalogue.
+9. The official IRD PDF is authoritative. The A.I.D.A. fillable PDF is
+   only a convenience version and must preserve the official wording.
+10. Do not mention prompts, CSV files, models or implementation details.
+"""
+
+
+def get_current_system_instruction() -> str:
+    """Build the model instruction from the latest staff-managed files."""
+
+    try:
+        current_master_prompt = read_required_text(MASTER_PROMPT_FILE)
+    except (OSError, FileNotFoundError):
+        current_master_prompt = MASTER_PROMPT
+
+    current_web_addendum = read_optional_text(
+        MASTER_PROMPT_WEB_ADDENDUM_FILE
+    )
+
+    try:
+        current_kb = read_required_text(PRIMARY_KNOWLEDGE_FILE)
+    except (OSError, FileNotFoundError):
+        current_kb = PRIMARY_KNOWLEDGE_BASE
+
+    current_web_additions = read_optional_text(
+        WEB_KNOWLEDGE_ADDITIONS_FILE
+    )
+
+    return f"""
+{current_master_prompt}
+
+WEB CHAT ADDENDUM
+
+{current_web_addendum}
+
+OFFICIAL IRD KNOWLEDGE BASE
+
+{current_kb}
+
+WEB AND FORMS KNOWLEDGE ADDITIONS
+
+{current_web_additions}
+
+IMPORTANT RESPONSE RULES
+
+1. Use the approved knowledge base for Anguilla IRD-specific facts.
+2. Never invent tax rates, deadlines, fees, forms, links or procedures.
+3. If a fact cannot be verified, say that clearly and direct the visitor
+   to the Inland Revenue Department.
+4. Never request passwords, bank details, card details or security codes.
+5. Respond in the conversation language selected by the visitor:
+   English, Spanish or Simplified Chinese.
 6. Keep the response suitable for a website chat window.
 7. Use Markdown structure:
    - Use **short bold headings** for sections.
@@ -356,6 +482,7 @@ def ask_aida(
     question: str,
     recent_messages: list[dict[str, str]],
     voice_mode: bool = False,
+    language: str = "en",
 ) -> str:
     """Send a question to Gemini with the approved context."""
 
@@ -373,6 +500,26 @@ def ask_aida(
     )
 
     voice_instruction = ""
+
+    language_names = {
+        "en": "English",
+        "es": "Spanish",
+        "zh": "Simplified Chinese",
+    }
+
+    response_language = language_names.get(
+        language,
+        "English",
+    )
+
+    language_instruction = f"""
+SELECTED CONVERSATION LANGUAGE:
+- Respond in {response_language}.
+- Keep the selected language for the conversation unless the visitor
+  explicitly asks to change language.
+- Official form names may remain in their official English title when
+  translating them would make the form harder to identify.
+"""
 
     if voice_mode:
         voice_instruction = """
@@ -392,6 +539,8 @@ Recent conversation:
 Answer the visitor's latest question using the approved A.I.D.A.
 instructions and IRD information.
 
+{language_instruction}
+
 {voice_instruction}
 
 Latest question:
@@ -402,7 +551,7 @@ Latest question:
         model=GEMINI_MODEL_NAME,
         contents=request_text,
         config={
-            "system_instruction": SYSTEM_INSTRUCTION,
+            "system_instruction": get_current_system_instruction(),
             "temperature": 0.2,
         },
     )
@@ -563,7 +712,7 @@ def find_matching_forms(
         tuple[int, bool, dict[str, Any]]
     ] = []
 
-    for form_record in FORMS_CATALOG:
+    for form_record in get_current_forms_catalog():
         score = 0
 
         for keyword in form_record.get(
@@ -600,7 +749,7 @@ def find_matching_forms(
     if generic_form_request and not scored_forms:
         featured_forms = [
             record
-            for record in FORMS_CATALOG
+            for record in get_current_forms_catalog()
             if record.get("featured")
         ]
 
@@ -968,7 +1117,10 @@ def health():
                 WEB_KNOWLEDGE_ADDITIONS.strip()
             ),
             "forms_catalog_loaded": bool(
-                FORMS_CATALOG
+                get_current_forms_catalog()
+            ),
+            "supabase_persistence_configured": (
+                supabase_configured()
             ),
             "primary_knowledge_file": (
                 PRIMARY_KNOWLEDGE_FILE.name
@@ -977,6 +1129,7 @@ def health():
             "speech_model": GEMINI_TTS_MODEL,
             "speech_voice": GEMINI_TTS_VOICE,
             "speech_output_format": "audio/wav",
+            "admin_configured": bool(ADMIN_PASSWORD),
         }
     )
 
@@ -989,7 +1142,7 @@ def forms():
         {
             "forms": [
                 enrich_form_resource(record)
-                for record in FORMS_CATALOG
+                for record in get_current_forms_catalog()
             ]
         }
     )
@@ -1070,16 +1223,48 @@ def chat():
         )
     )
 
+    language = str(
+        payload.get(
+            "language",
+            "en",
+        )
+    ).strip().lower()
+
+    if language not in {
+        "en",
+        "es",
+        "zh",
+    }:
+        language = "en"
+
+    # Redact common private/sensitive patterns locally before any visitor
+    # text is sent to Gemini.
+    redacted_question, question_redacted = redact_private_text(
+        cleaned_question
+    )
+    redacted_history, history_redacted = redact_history(
+        recent_messages
+    )
+    privacy_redacted = question_redacted or history_redacted
+
     try:
         answer = ask_aida(
-            cleaned_question,
-            recent_messages,
+            redacted_question,
+            redacted_history,
             voice_mode=voice_mode,
+            language=language,
         )
 
         matched_forms = find_matching_forms(
             cleaned_question,
             answer,
+        )
+
+        # Analytics receives the redacted question rather than the raw text.
+        log_analytics_entry(
+            redacted_question,
+            answer,
+            matched_forms,
         )
 
     except RuntimeError as error:
@@ -1115,6 +1300,7 @@ def chat():
         {
             "answer": answer,
             "forms": matched_forms,
+            "privacy_redacted": privacy_redacted,
         }
     )
 
@@ -1307,71 +1493,116 @@ def speech():
             }
         ), 400
 
-    try:
-        audio_bytes, voice_used = create_speech_audio(
-            text.strip()
+    cleaned_text = text.strip()
+
+    speech_cache_key = hashlib.sha256(
+        (
+            GEMINI_TTS_MODEL +
+            "|" +
+            GEMINI_TTS_VOICE +
+            "|" +
+            cleaned_text
+        ).encode("utf-8")
+    ).hexdigest()
+
+    with SPEECH_AUDIO_CACHE_LOCK:
+        cached_audio = SPEECH_AUDIO_CACHE.get(
+            speech_cache_key
         )
 
-    except ValueError as error:
-        return jsonify(
-            {
-                "error": str(error),
-                "code": "invalid_request",
-            }
-        ), 400
-
-    except RuntimeError as error:
-        raw_error = str(error)
-
-        if ":" in raw_error:
-            error_code, _ = raw_error.split(
-                ":",
-                1,
+        if cached_audio is not None:
+            SPEECH_AUDIO_CACHE.move_to_end(
+                speech_cache_key
             )
-        else:
-            error_code = "speech_service_error"
 
-        safe_message = (
-            "Speech is not configured."
-            if error_code == "speech_not_configured"
-            else friendly_speech_error(error_code)
-        )
+    if cached_audio is not None:
+        audio_bytes, voice_used = cached_audio
 
-        app.logger.error(
-            "Speech request failed: %s",
-            raw_error,
-        )
+    else:
+        try:
+            audio_bytes, voice_used = create_speech_audio(
+                cleaned_text
+            )
 
-        return jsonify(
-            {
-                "error": safe_message,
-                "code": error_code,
-            }
-        ), 503
+        except ValueError as error:
+            return jsonify(
+                {
+                    "error": str(error),
+                    "code": "invalid_request",
+                }
+            ), 400
 
-    except Exception:
-        app.logger.exception(
-            "Could not create Gemini speech audio."
-        )
+        except RuntimeError as error:
+            raw_error = str(error)
 
-        return jsonify(
-            {
-                "error": (
-                    "The speech service could not create audio."
-                ),
-                "code": "speech_service_error",
-            }
-        ), 502
+            if ":" in raw_error:
+                error_code, _ = raw_error.split(
+                    ":",
+                    1,
+                )
+            else:
+                error_code = "speech_service_error"
+
+            safe_message = (
+                "Speech is not configured."
+                if error_code == "speech_not_configured"
+                else friendly_speech_error(error_code)
+            )
+
+            app.logger.error(
+                "Speech request failed: %s",
+                raw_error,
+            )
+
+            return jsonify(
+                {
+                    "error": safe_message,
+                    "code": error_code,
+                }
+            ), 503
+
+        except Exception:
+            app.logger.exception(
+                "Could not create Gemini speech audio."
+            )
+
+            return jsonify(
+                {
+                    "error": (
+                        "The speech service could not create audio."
+                    ),
+                    "code": "speech_service_error",
+                }
+            ), 502
+
+        with SPEECH_AUDIO_CACHE_LOCK:
+            SPEECH_AUDIO_CACHE[
+                speech_cache_key
+            ] = (
+                audio_bytes,
+                voice_used,
+            )
+
+            SPEECH_AUDIO_CACHE.move_to_end(
+                speech_cache_key
+            )
+
+            while (
+                len(SPEECH_AUDIO_CACHE) >
+                MAX_SPEECH_CACHE_ITEMS
+            ):
+                SPEECH_AUDIO_CACHE.popitem(
+                    last=False
+                )
 
     return Response(
         audio_bytes,
         mimetype="audio/wav",
         headers={
-            "Cache-Control": "no-store",
+            "Cache-Control": "private, max-age=3600",
             "X-AIDA-Voice": voice_used,
         },
     )
-
 
 if __name__ == "__main__":
     app.run(

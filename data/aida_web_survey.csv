@@ -1,3 +1,4 @@
 ﻿submitted_at_utc,session_id,rating,comment,ended_reason,conversation_messages
 2026-08-07T18:15:41.567002+00:00,24b8375e-ceec-492b-be99-d62657bf4731,1,It was alright,inactivity_timeout,2
 2026-08-07T19:36:18.985801+00:00,f5d341bf-75e6-4100-8ef6-231ebaa6ac75,2,good,inactivity_timeout,8
+2026-08-10T02:35:06.700959+00:00,f31d3570-f441-48e5-b758-7df065d2d28f,4,,inactivity_timeout,0

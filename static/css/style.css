@@ -3088,7 +3088,6 @@ a:focus-visible {
 }
 
 /* Once disconnected, hide normal controls. Only feedback/new-chat controls remain. */
-.chat-widget.session-ended .header-controls,
 .chat-widget.session-ended .chat-footer,
 .chat-widget.session-ended .help-drawer,
 .chat-widget.session-ended .message-tools,
@@ -3156,4 +3155,510 @@ body.aida-session-ended
         animation-duration: 1ms;
         animation-iteration-count: 1;
     }
+}
+
+/* =====================================================================
+   V6.1 — IRD HUMAN LIVE SUPPORT ONLY
+   Appended to the known-working public chatbot stylesheet.
+===================================================================== */
+
+.live-chat-status-banner {
+    position: sticky;
+    z-index: 12;
+    bottom: 7px;
+
+    display: grid;
+    margin: 7px 6px 13px 63px;
+    padding: 10px 11px;
+
+    grid-template-columns: auto minmax(0, 1fr) auto;
+    align-items: center;
+    gap: 9px;
+
+    color: #315245;
+    background: rgba(255, 255, 255, 0.97);
+
+    border: 1px solid #c8ddd1;
+    border-radius: 13px;
+
+    box-shadow: 0 9px 24px rgba(0, 74, 44, 0.13);
+    backdrop-filter: blur(9px);
+
+    animation:
+        liveChatBannerIn
+        260ms
+        cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.live-chat-status-dot {
+    width: 11px;
+    height: 11px;
+    border-radius: 50%;
+}
+
+.live-chat-status-dot.waiting {
+    background: #f7941d;
+    box-shadow: 0 0 0 4px rgba(247, 148, 29, 0.14);
+    animation: liveChatWaitingPulse 1.7s infinite ease-in-out;
+}
+
+.live-chat-status-dot.connected {
+    background: #12a763;
+    box-shadow: 0 0 0 4px rgba(18, 167, 99, 0.13);
+}
+
+.live-chat-status-banner strong,
+.live-chat-status-banner span {
+    display: block;
+}
+
+.live-chat-status-banner strong {
+    color: #05603a;
+    font-size: 0.67rem;
+}
+
+.live-chat-status-banner div > span {
+    margin-top: 2px;
+    color: #74867c;
+    font-size: 0.57rem;
+    line-height: 1.32;
+}
+
+.live-chat-end-button {
+    min-height: 31px;
+    padding: 6px 8px;
+
+    color: #8a4a2e;
+    background: #fff7ef;
+
+    border: 1px solid #efcaaa;
+    border-radius: 8px;
+
+    cursor: pointer;
+    font-size: 0.58rem;
+    font-weight: 800;
+}
+
+/* Keep the header controls visible after timeout so the visitor can still
+   minimise or close the disconnected gray chatbot. */
+.chat-widget.session-ended .header-controls {
+    display: flex !important;
+}
+
+.chat-widget.session-ended .header-control {
+    pointer-events: auto;
+    opacity: 0.92;
+}
+
+@keyframes liveChatBannerIn {
+    from {
+        opacity: 0;
+        transform: translateY(8px) scale(0.985);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0) scale(1);
+    }
+}
+
+@keyframes liveChatWaitingPulse {
+    0%, 100% {
+        transform: scale(1);
+        opacity: 1;
+    }
+    50% {
+        transform: scale(1.18);
+        opacity: 0.72;
+    }
+}
+
+@media (max-width: 560px) {
+    .live-chat-status-banner {
+        margin-left: 50px;
+        grid-template-columns: auto minmax(0, 1fr);
+    }
+
+    .live-chat-end-button {
+        grid-column: 1 / -1;
+        width: 100%;
+    }
+}
+
+@media (max-width: 380px) {
+    .live-chat-status-banner {
+        margin-left: 0;
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .live-chat-status-banner,
+    .live-chat-status-dot.waiting {
+        animation-duration: 1ms;
+        animation-iteration-count: 1;
+    }
+}
+
+
+/* =====================================================================
+   V6.2 — LANGUAGE/TERMS + SCROLL + VOICE RESPONSIVENESS
+===================================================================== */
+
+
+/* ---------------------------------------------------------
+   Language and Terms of Use gate
+--------------------------------------------------------- */
+
+.language-terms-gate {
+    flex: 1;
+    min-height: 0;
+    padding: 22px 20px 24px;
+
+    overflow-x: hidden;
+    overflow-y: auto;
+
+    background:
+        radial-gradient(
+            circle at 100% 0%,
+            rgba(255, 139, 24, 0.08),
+            transparent 30%
+        ),
+        linear-gradient(
+            180deg,
+            #ffffff,
+            #f8fcfa
+        );
+}
+
+.language-terms-gate[hidden] {
+    display: none;
+}
+
+.chat-widget.onboarding-active .chat-body {
+    display: none;
+}
+
+.chat-widget.onboarding-active .help-drawer {
+    display: none !important;
+}
+
+.chat-widget.onboarding-active .chat-footer {
+    opacity: 0.52;
+    pointer-events: none;
+}
+
+.language-gate-card {
+    width: 100%;
+    max-width: 610px;
+    margin: 0 auto;
+}
+
+.language-gate-kicker {
+    display: flex;
+    margin-bottom: 15px;
+
+    align-items: center;
+    gap: 8px;
+
+    color: #52665c;
+
+    font-size: 0.76rem;
+    line-height: 1.35;
+}
+
+.language-gate-kicker span:first-child {
+    font-size: 1rem;
+}
+
+.language-gate-card h2 {
+    margin: 0 0 4px;
+
+    color: #213229;
+
+    font-size: clamp(1.36rem, 3vw, 1.72rem);
+    line-height: 1.15;
+}
+
+.language-gate-languages {
+    margin: 0 0 15px;
+
+    color: #607068;
+
+    font-size: 0.85rem;
+}
+
+.language-choice-grid {
+    display: grid;
+    margin-bottom: 17px;
+
+    grid-template-columns:
+        repeat(3, minmax(0, 1fr));
+
+    gap: 8px;
+}
+
+.language-choice {
+    min-height: 62px;
+    padding: 9px 8px;
+
+    color: #274037;
+    background: #ffffff;
+
+    border: 1px solid #c7d8cf;
+    border-radius: 11px;
+
+    text-align: left;
+
+    transition:
+        transform 140ms ease,
+        border-color 140ms ease,
+        background 140ms ease,
+        box-shadow 140ms ease;
+}
+
+.language-choice:hover {
+    transform: translateY(-1px);
+
+    border-color: #65ac88;
+
+    box-shadow:
+        0 6px 14px rgba(0, 100, 60, 0.08);
+}
+
+.language-choice.is-selected {
+    color: #005f39;
+    background: #effaf4;
+
+    border-color: #008957;
+
+    box-shadow:
+        0 0 0 2px rgba(0, 137, 87, 0.08);
+}
+
+.language-choice strong,
+.language-choice span {
+    display: block;
+}
+
+.language-choice strong {
+    font-size: 0.82rem;
+}
+
+.language-choice span {
+    margin-top: 2px;
+
+    color: #718078;
+
+    font-size: 0.65rem;
+}
+
+.terms-panel {
+    padding-top: 14px;
+
+    border-top: 1px solid #dce8e1;
+}
+
+.terms-panel h3 {
+    position: relative;
+
+    margin: 0 0 9px;
+    padding-left: 15px;
+
+    color: #26372f;
+
+    font-size: 0.92rem;
+}
+
+.terms-panel h3::before {
+    position: absolute;
+    top: 0.08em;
+    left: 0;
+
+    color: #008957;
+
+    content: "✓";
+
+    font-weight: 900;
+}
+
+.terms-copy {
+    color: #4d5f56;
+
+    font-size: 0.76rem;
+    line-height: 1.48;
+}
+
+.terms-copy ul {
+    margin: 0;
+    padding-left: 19px;
+}
+
+.terms-copy li {
+    margin: 0 0 7px;
+}
+
+.terms-agreement {
+    display: flex;
+    margin-top: 13px;
+
+    align-items: flex-start;
+    gap: 8px;
+
+    color: #35473e;
+
+    font-size: 0.76rem;
+    line-height: 1.35;
+}
+
+.terms-agreement input {
+    width: 16px;
+    height: 16px;
+    margin-top: 1px;
+
+    accent-color: #008957;
+}
+
+.terms-continue-button {
+    min-width: 116px;
+    min-height: 39px;
+    margin-top: 12px;
+    padding: 8px 15px;
+
+    color: #ffffff;
+    background:
+        linear-gradient(
+            145deg,
+            #008957,
+            #00643d
+        );
+
+    border: 0;
+    border-radius: 10px;
+
+    font-size: 0.74rem;
+    font-weight: 850;
+
+    box-shadow:
+        0 6px 14px rgba(0, 105, 63, 0.17);
+}
+
+.terms-continue-button:disabled {
+    color: #939b97;
+    background: #e7eae8;
+
+    box-shadow: none;
+
+    cursor: not-allowed;
+}
+
+.language-gate-privacy {
+    margin: 17px 0 0;
+    padding: 10px 11px;
+
+    color: #6f5c4c;
+    background: #fff8f0;
+
+    border: 1px solid #f3d2b1;
+    border-radius: 10px;
+
+    font-size: 0.68rem;
+    line-height: 1.4;
+}
+
+
+/* ---------------------------------------------------------
+   Voice Mode status now remains visible above the composer
+--------------------------------------------------------- */
+
+.chat-widget > .voice-mode-banner {
+    position: relative;
+    z-index: 18;
+
+    flex: 0 0 auto;
+
+    margin: 8px 14px 0;
+    padding: 10px 12px;
+
+    border-radius: 14px;
+
+    box-shadow:
+        0 8px 18px rgba(0, 91, 55, 0.16);
+}
+
+.chat-widget > .voice-mode-banner
+.voice-mode-copy span {
+    font-size: 0.68rem;
+    font-weight: 650;
+}
+
+
+/* ---------------------------------------------------------
+   Manual scroll control
+--------------------------------------------------------- */
+
+/*
+   Scrolling is controlled in JavaScript. Once the visitor moves more
+   than about 110px away from the latest message, background polling,
+   status updates and new assistant content no longer pull the viewport
+   back to the bottom. Sending a new message intentionally returns to
+   the current conversation.
+*/
+
+
+@media (max-width: 560px) {
+    .language-terms-gate {
+        padding:
+            18px
+            14px
+            20px;
+    }
+
+    .language-choice-grid {
+        grid-template-columns:
+            1fr;
+    }
+
+    .language-choice {
+        min-height: 52px;
+    }
+
+    .chat-widget > .voice-mode-banner {
+        margin:
+            7px
+            10px
+            0;
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .language-choice {
+        transition-duration: 1ms;
+    }
+}
+
+
+/* =====================================================================
+   V7 — END CHAT + HANDOFF PRIVACY
+===================================================================== */
+
+.end-chat-control {
+    color: #ffe2c3;
+}
+
+.end-chat-control:hover {
+    color: #ffffff;
+    background: rgba(255, 112, 16, 0.25);
+}
+
+/*
+   After a session ends, Minimise and Close remain available.
+   End and Expand are hidden because the conversation is already finished.
+*/
+.chat-widget.session-ended #chat-end-button,
+.chat-widget.session-ended #chat-expand-button {
+    display: none !important;
+}
+
+.chat-widget.session-ended #chat-minimise-button,
+.chat-widget.session-ended #chat-close-button {
+    display: grid !important;
 }

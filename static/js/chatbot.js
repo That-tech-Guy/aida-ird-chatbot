@@ -3,6 +3,7 @@ const chatWidget = document.getElementById("chat-widget");
 const closeButton = document.getElementById("chat-close-button");
 const minimiseButton = document.getElementById("chat-minimise-button");
 const expandButton = document.getElementById("chat-expand-button");
+const endChatButton = document.getElementById("chat-end-button");
 
 const chatForm = document.getElementById("chat-form");
 const chatInput = document.getElementById("chat-input");
@@ -17,6 +18,44 @@ const drawerClose = document.getElementById("drawer-close");
 const quickActionsGrid = document.getElementById("quick-actions-grid");
 const popularQuestionsContainer = document.getElementById(
     "popular-questions"
+);
+
+const chatFooter = document.querySelector(
+    ".chat-footer"
+);
+
+const languageTermsGate = document.getElementById(
+    "language-terms-gate"
+);
+
+const languageChoiceButtons = Array.from(
+    document.querySelectorAll(
+        ".language-choice"
+    )
+);
+
+const termsHeading = document.getElementById(
+    "terms-heading"
+);
+
+const termsCopy = document.getElementById(
+    "terms-copy"
+);
+
+const termsAgreeCheckbox = document.getElementById(
+    "terms-agree-checkbox"
+);
+
+const termsAgreeLabel = document.getElementById(
+    "terms-agree-label"
+);
+
+const termsContinueButton = document.getElementById(
+    "terms-continue-button"
+);
+
+const languageGatePrivacy = document.getElementById(
+    "language-gate-privacy"
 );
 
 const avatarPath = "/static/images/aida_logo.jpeg";
@@ -50,6 +89,17 @@ let activeAudio = null;
 let activeSpeechButton = null;
 
 const speechCache = new Map();
+const speechRequestCache = new Map();
+
+// Language/Terms intentionally reset on every full page reload.
+// Acceptance only applies to the current active chat session.
+let selectedLanguage = "";
+let termsAccepted = false;
+
+// Once a visitor deliberately scrolls away from the latest messages,
+// background events must not pull the conversation back down.
+let conversationAutoScrollPaused = false;
+let ignoreConversationScrollUntil = 0;
 
 let voiceModeActive = false;
 let voiceModeSpeaking = false;
@@ -57,6 +107,14 @@ let speechRecognition = null;
 let speechRecognitionActive = false;
 let recognitionAutoSubmit = false;
 let suppressRecognitionRestart = false;
+
+// IRD staff live-support state
+let liveChatState = "inactive";
+let liveChatPollTimer = null;
+let liveChatSeenMessageIds = new Set();
+
+let liveHandoffIntake = null;
+let sessionEndReason = "inactivity_timeout";
 
 
 // ---------------------------------------------------------
@@ -112,11 +170,10 @@ const quickActions = [
         action: "voice"
     },
     {
-        label: "Contact IRD",
+        label: "Chat with IRD",
         tone: "orange",
         icon: "headset",
-        question:
-            "What are the IRD office hours and contact details?"
+        action: "liveChat"
     }
 ];
 
@@ -125,7 +182,8 @@ const popularQuestions = [
     "How do I pay Property Tax?",
     "What is General Services Tax?",
     "How do I renew my vehicle licence?",
-    "What are the business registration requirements?"
+    "What are the business registration requirements?",
+    "What are the IRD office hours and contact details?"
 ];
 
 
@@ -241,6 +299,251 @@ function iconSvg(iconName) {
     };
 
     return icons[iconName] || icons.document;
+}
+
+
+// ---------------------------------------------------------
+// Language selection and Terms of Use
+// ---------------------------------------------------------
+
+const LANGUAGE_OPTIONS = {
+    en: {
+        name: "English",
+        speechRecognition: "en-GB",
+        termsHeading: "Terms of Use",
+        terms: [
+            "A.I.D.A. provides general Inland Revenue Department information and does not replace official or account-specific assistance.",
+            "Do not enter passwords, banking or card details, security codes, authentication codes, or private taxpayer information.",
+            "Important deadlines, amounts, compliance matters and account-specific information should be verified with the Inland Revenue Department."
+        ],
+        agreement: "I agree to the Terms of Use.",
+        continueLabel: "Continue",
+        privacy:
+            "Please do not enter passwords, card details, banking information or security codes.",
+        placeholder: "Type your question here...",
+        greeting:
+            "Hello! 👋 I’m **A.I.D.A.**, your Anguilla Inland Revenue Assistant. " +
+            "I’m here to help with tax information, licences, payments and forms.\n\n" +
+            "**How can I assist you today?**"
+    },
+
+    es: {
+        name: "Español",
+        speechRecognition: "es-ES",
+        termsHeading: "Términos de uso",
+        terms: [
+            "A.I.D.A. proporciona información general del Departamento de Impuestos Internos y no sustituye la asistencia oficial o específica de una cuenta.",
+            "No introduzca contraseñas, datos bancarios o de tarjetas, códigos de seguridad, códigos de autenticación ni información privada del contribuyente.",
+            "Verifique con el Departamento de Impuestos Internos los plazos, importes, asuntos de cumplimiento y la información específica de su cuenta."
+        ],
+        agreement: "Acepto los Términos de uso.",
+        continueLabel: "Continuar",
+        privacy:
+            "No introduzca contraseñas, datos de tarjetas, información bancaria ni códigos de seguridad.",
+        placeholder: "Escriba su pregunta aquí...",
+        greeting:
+            "¡Hola! 👋 Soy **A.I.D.A.**, su asistente del Departamento de Impuestos Internos de Anguilla. " +
+            "Puedo ayudarle con información tributaria, licencias, pagos y formularios.\n\n" +
+            "**¿Cómo puedo ayudarle hoy?**"
+    },
+
+    zh: {
+        name: "中文",
+        speechRecognition: "zh-CN",
+        termsHeading: "使用条款",
+        terms: [
+            "A.I.D.A. 仅提供安圭拉税务局的一般信息，不能替代官方意见或针对个人账户的协助。",
+            "请勿输入密码、银行或银行卡资料、安全验证码、身份验证代码或私人纳税人信息。",
+            "重要截止日期、金额、合规事项以及账户相关信息，请向安圭拉税务局核实。"
+        ],
+        agreement: "我同意使用条款。",
+        continueLabel: "继续",
+        privacy:
+            "请勿输入密码、银行卡资料、银行信息或安全验证码。",
+        placeholder: "请在这里输入您的问题...",
+        greeting:
+            "您好！👋 我是 **A.I.D.A.**，安圭拉税务局智能助理。 " +
+            "我可以协助您了解税务、执照、付款和表格等一般信息。\n\n" +
+            "**今天有什么可以帮您？**"
+    }
+};
+
+
+function getSelectedLanguageOption() {
+    return (
+        LANGUAGE_OPTIONS[selectedLanguage] ||
+        LANGUAGE_OPTIONS.en
+    );
+}
+
+
+function renderTermsForLanguage(languageCode) {
+    const option = LANGUAGE_OPTIONS[languageCode];
+
+    if (!option) {
+        return;
+    }
+
+    selectedLanguage = languageCode;
+
+    languageChoiceButtons.forEach((button) => {
+        const selected = (
+            button.dataset.language === languageCode
+        );
+
+        button.classList.toggle(
+            "is-selected",
+            selected
+        );
+
+        button.setAttribute(
+            "aria-pressed",
+            String(selected)
+        );
+    });
+
+    termsHeading.textContent =
+        option.termsHeading;
+
+    termsCopy.replaceChildren();
+
+    const list = document.createElement("ul");
+
+    option.terms.forEach((itemText) => {
+        const item = document.createElement("li");
+        item.textContent = itemText;
+        list.appendChild(item);
+    });
+
+    termsCopy.appendChild(list);
+
+    termsAgreeLabel.textContent =
+        option.agreement;
+
+    termsContinueButton.textContent =
+        option.continueLabel;
+
+    languageGatePrivacy.textContent =
+        option.privacy;
+
+    termsAgreeCheckbox.disabled = false;
+    termsAgreeCheckbox.checked = false;
+    termsContinueButton.disabled = true;
+}
+
+
+function showLanguageTermsGate(options = {}) {
+    const force = Boolean(options.force);
+
+    if (
+        termsAccepted &&
+        !force
+    ) {
+        return false;
+    }
+
+    if (force) {
+        termsAccepted = false;
+        selectedLanguage = "";
+    }
+
+    languageTermsGate.hidden = false;
+
+    chatWidget.classList.add(
+        "onboarding-active"
+    );
+
+    setConversationControlsDisabled(true);
+
+    closeHelpDrawer();
+    deactivateVoiceMode({
+        silent: true
+    });
+
+    if (
+        selectedLanguage &&
+        LANGUAGE_OPTIONS[selectedLanguage]
+    ) {
+        renderTermsForLanguage(
+            selectedLanguage
+        );
+    } else {
+        languageChoiceButtons.forEach(
+            (button) => {
+                button.classList.remove(
+                    "is-selected"
+                );
+
+                button.setAttribute(
+                    "aria-pressed",
+                    "false"
+                );
+            }
+        );
+
+        termsCopy.textContent =
+            "Choose a language above to review the terms.";
+
+        termsAgreeCheckbox.checked = false;
+        termsAgreeCheckbox.disabled = true;
+        termsContinueButton.disabled = true;
+    }
+
+    return true;
+}
+
+
+function hideLanguageTermsGate() {
+    languageTermsGate.hidden = true;
+
+    chatWidget.classList.remove(
+        "onboarding-active"
+    );
+}
+
+
+function acceptLanguageTerms() {
+    if (
+        !selectedLanguage ||
+        !LANGUAGE_OPTIONS[selectedLanguage] ||
+        !termsAgreeCheckbox.checked
+    ) {
+        return;
+    }
+
+    termsAccepted = true;
+
+    hideLanguageTermsGate();
+
+    if (!sessionEnded) {
+        setConversationControlsDisabled(false);
+    }
+
+    const option = getSelectedLanguageOption();
+
+    chatInput.placeholder =
+        option.placeholder;
+
+    sessionStarted = true;
+
+    loadInitialConversation();
+    scheduleInactivityWarning();
+
+    chatInput.focus();
+}
+
+
+function changeLanguage() {
+    if (waitingForReply) {
+        return;
+    }
+
+    clearInactivityTimer();
+    clearDisconnectCountdown();
+
+    showLanguageTermsGate({
+        force: true
+    });
 }
 
 
@@ -392,9 +695,12 @@ function scheduleInactivityWarning() {
     clearInactivityTimer();
 
     if (
+        !termsAccepted ||
         !sessionStarted ||
         sessionEnded ||
-        stillTherePromptActive
+        stillTherePromptActive ||
+        liveChatState === "queued" ||
+        liveChatState === "active"
     ) {
         return;
     }
@@ -444,7 +750,7 @@ function createTimeoutBanner() {
             <strong>Still with me?</strong>
             <span>
                 This chat will disconnect in
-                <b id="session-countdown-time">1:00</b>
+                <b id="session-countdown-time">3:00</b>
                 without activity.
             </span>
         </div>
@@ -526,7 +832,7 @@ function beginStillTherePrompt() {
     addAssistantMessage(
         "**Are you still there?**\n" +
         "I haven’t seen any activity for a little while. " +
-        "This chat will close in **1 minute** unless you continue."
+        "This chat will close in **3 minutes** unless you continue."
     );
 
     createTimeoutBanner();
@@ -617,11 +923,25 @@ function setSessionEndedAppearance(ended) {
 }
 
 
-function disconnectSessionForInactivity() {
+async function endAidaSession(
+    reason = "user_ended"
+) {
     if (sessionEnded) {
         return;
     }
 
+    if (
+        liveChatState === "queued" ||
+        liveChatState === "active"
+    ) {
+        await endLiveChatSession({
+            silent: true
+        });
+    }
+
+    resetLiveHandoffIntake();
+
+    sessionEndReason = reason;
     sessionEnded = true;
     stillTherePromptActive = false;
 
@@ -640,12 +960,26 @@ function disconnectSessionForInactivity() {
     setSessionEndedAppearance(true);
 
     addAssistantMessage(
-        "**Chat ended due to inactivity.**\n" +
-        "For your privacy, this session has been disconnected. " +
-        "Please tell us how well A.I.D.A. performed before starting a new chat."
+        reason === "inactivity_timeout"
+            ? (
+                "**Chat ended due to inactivity.**\n" +
+                "For your privacy, this session has been disconnected. " +
+                "Please tell us how well A.I.D.A. performed before starting a new chat."
+            )
+            : (
+                "**Chat ended.**\n" +
+                "Thank you for using A.I.D.A. Please tell us how the chat performed."
+            )
     );
 
     showSessionSurvey();
+}
+
+
+function disconnectSessionForInactivity() {
+    void endAidaSession(
+        "inactivity_timeout"
+    );
 }
 
 
@@ -717,7 +1051,7 @@ async function submitSessionSurvey(
                         rating,
                         comment,
                         ended_reason:
-                            "inactivity_timeout",
+                            sessionEndReason,
                         conversation_messages:
                             conversationHistory.length
                     }
@@ -924,6 +1258,18 @@ function showSessionSurvey() {
 
 
 function startNewSession() {
+    if (
+        liveChatState === "queued" ||
+        liveChatState === "active"
+    ) {
+        void endLiveChatSession({
+            silent: true
+        });
+    }
+
+    resetLiveChatLocalState();
+    resetLiveHandoffIntake();
+
     deactivateVoiceMode({
         silent: true
     });
@@ -937,18 +1283,21 @@ function startNewSession() {
     sessionEnded = false;
     surveyShown = false;
     stillTherePromptActive = false;
-    sessionStarted = true;
+    sessionStarted = false;
+    sessionEndReason =
+        "inactivity_timeout";
 
-    setConversationControlsDisabled(false);
+    termsAccepted = false;
+    selectedLanguage = "";
+
     setSessionEndedAppearance(false);
-
     clearUnreadNotifications();
 
-    loadInitialConversation();
+    chatMessages.replaceChildren();
 
-    scheduleInactivityWarning();
-
-    chatInput.focus();
+    showLanguageTermsGate({
+        force: true
+    });
 }
 
 
@@ -1076,8 +1425,14 @@ function renderVoiceModeBanner(statusText = "Listening…") {
         }
     );
 
-    chatMessages.appendChild(banner);
-    scrollConversationToBottom();
+    if (chatFooter) {
+        chatWidget.insertBefore(
+            banner,
+            chatFooter
+        );
+    } else {
+        chatMessages.appendChild(banner);
+    }
 }
 
 
@@ -1131,6 +1486,8 @@ function createSpeechRecognition() {
     recognition.interimResults = false;
     recognition.maxAlternatives = 1;
     recognition.lang = (
+        getSelectedLanguageOption()
+            .speechRecognition ||
         navigator.language ||
         "en-US"
     );
@@ -1167,7 +1524,7 @@ function createSpeechRecognition() {
             chatInput.value = "";
 
             updateVoiceModeStatus(
-                "Thinking…"
+                "A.I.D.A. is thinking…"
             );
 
             submitMessage(
@@ -1283,7 +1640,7 @@ async function playVoiceModeResponse(messageText) {
 
     voiceModeSpeaking = true;
     updateVoiceModeStatus(
-        "A.I.D.A. is speaking…"
+        "Preparing A.I.D.A.’s voice…"
     );
 
     try {
@@ -1339,6 +1696,10 @@ async function playVoiceModeResponse(messageText) {
             }
         );
 
+        updateVoiceModeStatus(
+            "A.I.D.A. is speaking…"
+        );
+
         await audio.play();
 
     } catch (error) {
@@ -1365,6 +1726,18 @@ function activateVoiceMode() {
         voiceModeActive ||
         sessionEnded
     ) {
+        return;
+    }
+
+    if (
+        liveChatState === "queued" ||
+        liveChatState === "active"
+    ) {
+        addAssistantMessage(
+            "Voice Mode is paused while you are connected to **IRD staff live support**.",
+            [],
+            { countUnread: false }
+        );
         return;
     }
 
@@ -1464,13 +1837,19 @@ function openChatbot() {
 
     clearUnreadNotifications();
 
-    if (!sessionStarted && !sessionEnded) {
+    if (!termsAccepted) {
+        showLanguageTermsGate();
+
+    } else if (!sessionStarted && !sessionEnded) {
         sessionStarted = true;
         scheduleInactivityWarning();
     }
 
     window.setTimeout(() => {
-        if (!sessionEnded) {
+        if (
+            !sessionEnded &&
+            termsAccepted
+        ) {
             chatInput.focus();
         }
 
@@ -1715,8 +2094,9 @@ function renderRichText(container, markdownText) {
     container.replaceChildren();
     container.classList.add("rich-message");
 
-    const lines = markdownText
-        .replace(/\r\n/g, "\n")
+    const lines = String(markdownText || "")
+        .replace(/\\n/g, "\n")
+        .replace(/\r\n?/g, "\n")
         .split("\n");
 
     let currentList = null;
@@ -1834,8 +2214,34 @@ function getCurrentTime() {
 }
 
 
-function scrollConversationToBottom() {
-    chatMessages.scrollTop = chatMessages.scrollHeight;
+function conversationIsNearBottom(
+    threshold = 110
+) {
+    const distanceFromBottom = (
+        chatMessages.scrollHeight -
+        chatMessages.scrollTop -
+        chatMessages.clientHeight
+    );
+
+    return distanceFromBottom <= threshold;
+}
+
+
+function scrollConversationToBottom(
+    force = false
+) {
+    if (
+        conversationAutoScrollPaused &&
+        !force
+    ) {
+        return;
+    }
+
+    ignoreConversationScrollUntil =
+        performance.now() + 120;
+
+    chatMessages.scrollTop =
+        chatMessages.scrollHeight;
 }
 
 
@@ -1990,6 +2396,8 @@ function createMessageGroup(
 
 
 function addUserMessage(messageText) {
+    conversationAutoScrollPaused = false;
+
     chatMessages.appendChild(
         createMessageGroup(
             "user",
@@ -1997,7 +2405,7 @@ function addUserMessage(messageText) {
         )
     );
 
-    scrollConversationToBottom();
+    scrollConversationToBottom(true);
 }
 
 
@@ -2231,50 +2639,107 @@ async function fetchSpeechAudio(messageText) {
         return speechCache.get(messageText);
     }
 
-    const response = await fetch(
-        "/api/speech",
-        {
-            method: "POST",
-            headers: {
-                "Content-Type": "application/json"
-            },
-            body: JSON.stringify(
-                {
-                    text: messageText
-                }
-            )
-        }
-    );
-
-    if (!response.ok) {
-        let payload = {};
-
-        try {
-            payload = await response.json();
-
-        } catch {
-            // Keep the fallback message below.
-        }
-
-        const error = new Error(
-            payload.error ||
-            "Speech is unavailable for this response."
+    if (speechRequestCache.has(messageText)) {
+        return speechRequestCache.get(
+            messageText
         );
-
-        error.code = payload.code || "speech_error";
-
-        throw error;
     }
 
-    const audioBlob = await response.blob();
-    const audioUrl = URL.createObjectURL(audioBlob);
+    const speechRequest = (
+        async () => {
+            const response = await fetch(
+                "/api/speech",
+                {
+                    method: "POST",
+                    headers: {
+                        "Content-Type":
+                            "application/json"
+                    },
+                    body: JSON.stringify(
+                        {
+                            text: messageText
+                        }
+                    )
+                }
+            );
 
-    speechCache.set(
+            if (!response.ok) {
+                let payload = {};
+
+                try {
+                    payload =
+                        await response.json();
+
+                } catch {
+                    // Keep the fallback message below.
+                }
+
+                const error = new Error(
+                    payload.error ||
+                    "Speech is unavailable for this response."
+                );
+
+                error.code =
+                    payload.code ||
+                    "speech_error";
+
+                throw error;
+            }
+
+            const audioBlob =
+                await response.blob();
+
+            const audioUrl =
+                URL.createObjectURL(
+                    audioBlob
+                );
+
+            speechCache.set(
+                messageText,
+                audioUrl
+            );
+
+            return audioUrl;
+        }
+    )();
+
+    speechRequestCache.set(
         messageText,
-        audioUrl
+        speechRequest
     );
 
-    return audioUrl;
+    try {
+        return await speechRequest;
+
+    } finally {
+        speechRequestCache.delete(
+            messageText
+        );
+    }
+}
+
+
+function prefetchSpeechAudio(messageText) {
+    if (
+        !messageText ||
+        (
+            speechStatus &&
+            speechStatus.available === false
+        )
+    ) {
+        return null;
+    }
+
+    const request = fetchSpeechAudio(
+        messageText
+    );
+
+    request.catch(() => {
+        // Prefetch is an optimisation only.
+        // The Listen button will show any actual error if the user taps it.
+    });
+
+    return request;
 }
 
 
@@ -2450,6 +2915,13 @@ function buildHelpDrawer() {
                 return;
             }
 
+            if (action.action === "liveChat") {
+                startLiveHandoffIntake(
+                    action.label
+                );
+                return;
+            }
+
             if (action.action === "voice") {
                 toggleVoiceMode();
                 return;
@@ -2609,6 +3081,785 @@ function removeTypingIndicator() {
 }
 
 
+
+// ---------------------------------------------------------
+// IRD staff live-support handoff
+// ---------------------------------------------------------
+
+function normaliseLiveChatCommand(messageText) {
+    return String(messageText || "")
+        .trim()
+        .toLowerCase()
+        .replace(/[.!?]+$/g, "");
+}
+
+
+function isLiveChatRequest(messageText) {
+    return [
+        "live chat",
+        "live agent",
+        "human agent",
+        "chat with ird",
+        "speak to an agent",
+        "speak to a live ird agent",
+        "speak to someone",
+        "talk to an agent"
+    ].includes(
+        normaliseLiveChatCommand(messageText)
+    );
+}
+
+
+function isLiveChatEndRequest(messageText) {
+    return [
+        "end live chat",
+        "leave live chat",
+        "exit live chat"
+    ].includes(
+        normaliseLiveChatCommand(messageText)
+    );
+}
+
+
+function removeLiveChatBanner() {
+    document.getElementById(
+        "live-chat-status-banner"
+    )?.remove();
+}
+
+
+function renderLiveChatBanner(statusPayload = {}) {
+    let banner = document.getElementById(
+        "live-chat-status-banner"
+    );
+
+    if (!banner) {
+        banner = document.createElement("section");
+        banner.className = "live-chat-status-banner";
+        banner.id = "live-chat-status-banner";
+        chatMessages.appendChild(banner);
+    }
+
+    const ticket = statusPayload.ticket ||
+        sessionId.slice(0, 8);
+
+    if (liveChatState === "queued") {
+        const position = Number(
+            statusPayload.position || 0
+        );
+
+        banner.innerHTML = `
+            <span class="live-chat-status-dot waiting"></span>
+            <div>
+                <strong>Waiting for IRD staff</strong>
+                <span>
+                    Ticket ${ticket}
+                    ${position ? ` · Queue position #${position}` : ""}
+                </span>
+            </div>
+            <button
+                type="button"
+                class="live-chat-end-button"
+            >
+                Leave queue
+            </button>
+        `;
+    } else {
+        banner.innerHTML = `
+            <span class="live-chat-status-dot connected"></span>
+            <div>
+                <strong>Connected to IRD staff</strong>
+                <span>
+                    Ticket ${ticket} · Messages now go directly to the staff representative.
+                </span>
+            </div>
+            <button
+                type="button"
+                class="live-chat-end-button"
+            >
+                End live chat
+            </button>
+        `;
+    }
+
+    banner
+        .querySelector(".live-chat-end-button")
+        ?.addEventListener(
+            "click",
+            () => endLiveChatSession()
+        );
+
+    scrollConversationToBottom();
+}
+
+
+function stopLiveChatPolling() {
+    if (liveChatPollTimer) {
+        window.clearInterval(liveChatPollTimer);
+        liveChatPollTimer = null;
+    }
+}
+
+
+function resetLiveChatLocalState() {
+    stopLiveChatPolling();
+    removeLiveChatBanner();
+    liveChatState = "inactive";
+    liveChatSeenMessageIds = new Set();
+}
+
+
+function displayNewLiveChatMessages(messages) {
+    for (const message of messages) {
+        if (
+            !message?.id ||
+            liveChatSeenMessageIds.has(message.id)
+        ) {
+            continue;
+        }
+
+        liveChatSeenMessageIds.add(message.id);
+
+        // Context is passed to staff for continuity, but should not be
+        // replayed to the visitor. User messages are already visible locally.
+        if (
+            message.source === "context" ||
+            message.role === "user"
+        ) {
+            continue;
+        }
+
+        if (message.role === "admin") {
+            addAssistantMessage(
+                "**IRD Staff:**\n" +
+                String(message.content || "")
+            );
+        }
+    }
+}
+
+
+async function pollLiveChatStatus() {
+    if (
+        liveChatState !== "queued" &&
+        liveChatState !== "active"
+    ) {
+        return;
+    }
+
+    try {
+        const response = await fetch(
+            "/api/live-chat/status?session_id=" +
+            encodeURIComponent(sessionId),
+            { cache: "no-store" }
+        );
+
+        const payload = await response.json();
+
+        if (!response.ok) {
+            return;
+        }
+
+        const messages = Array.isArray(payload.messages)
+            ? payload.messages
+            : [];
+
+        displayNewLiveChatMessages(messages);
+
+        if (payload.status === "queued") {
+            liveChatState = "queued";
+            renderLiveChatBanner(payload);
+            return;
+        }
+
+        if (payload.status === "active") {
+            liveChatState = "active";
+            renderLiveChatBanner(payload);
+            return;
+        }
+
+        if (payload.status === "ended") {
+            resetLiveChatLocalState();
+            scheduleInactivityWarning();
+        }
+
+    } catch {
+        // A temporary network error should not throw the visitor out of queue.
+    }
+}
+
+
+function startLiveChatPolling() {
+    stopLiveChatPolling();
+    pollLiveChatStatus();
+
+    // One-second polling gives the prototype near-real-time two-way chat
+    // without introducing WebSocket infrastructure.
+    liveChatPollTimer = window.setInterval(
+        pollLiveChatStatus,
+        1000
+    );
+}
+
+
+function resetLiveHandoffIntake() {
+    liveHandoffIntake = null;
+}
+
+
+function validateHandoffFirstName(value) {
+    const cleaned = String(
+        value || ""
+    ).trim();
+
+    return (
+        cleaned.length >= 2 &&
+        cleaned.length <= 50 &&
+        /^[A-Za-zÀ-ÖØ-öø-ÿ'’\-]+$/.test(
+            cleaned
+        )
+    );
+}
+
+
+function validateHandoffLastName(value) {
+    const cleaned = String(
+        value || ""
+    ).trim();
+
+    return (
+        cleaned.length >= 2 &&
+        cleaned.length <= 70 &&
+        /^[A-Za-zÀ-ÖØ-öø-ÿ'’\- ]+$/.test(
+            cleaned
+        )
+    );
+}
+
+
+function validateHandoffEmail(value) {
+    const cleaned = String(
+        value || ""
+    ).trim();
+
+    /*
+        Practical browser-side email validation.
+
+        Flask validates the address again before a queue ticket
+        is created, so this is not the only validation layer.
+    */
+    const emailPattern =
+        /^[A-Z0-9.!#$%&'*+/=?^_`{|}~-]+@[A-Z0-9](?:[A-Z0-9-]{0,61}[A-Z0-9])?(?:\.[A-Z0-9](?:[A-Z0-9-]{0,61}[A-Z0-9])?)+$/i;
+
+    return (
+        cleaned.length <= 200 &&
+        emailPattern.test(cleaned)
+    );
+}
+
+
+function startLiveHandoffIntake(
+    displayText = "Chat with IRD"
+) {
+    if (
+        sessionEnded ||
+        liveHandoffIntake ||
+        liveChatState === "queued" ||
+        liveChatState === "active"
+    ) {
+        return;
+    }
+
+    deactivateVoiceMode({
+        silent: true
+    });
+
+    closeHelpDrawer();
+
+    addUserMessage(
+        displayText
+    );
+
+    liveHandoffIntake = {
+        step: "first_name",
+        first_name: "",
+        last_name: "",
+        contact_name: "",
+        contact_email: "",
+        issue: ""
+    };
+
+    addAssistantMessage(
+        "**Before I place you in the IRD support queue, what is your first name?**\n" +
+        "This handoff information goes directly to IRD staff and is not added to the Gemini conversation.",
+        [],
+        {
+            countUnread: false
+        }
+    );
+
+    chatInput.value = "";
+    chatInput.focus();
+}
+
+
+async function handleLiveHandoffIntake(
+    messageText
+) {
+    if (!liveHandoffIntake) {
+        return false;
+    }
+
+    const cleaned = String(
+        messageText || ""
+    ).trim();
+
+    if (!cleaned) {
+        return true;
+    }
+
+    const cancelCommands = [
+        "cancel",
+        "cancel live chat",
+        "cancel live support",
+        "nevermind",
+        "never mind"
+    ];
+
+    if (
+        cancelCommands.includes(
+            cleaned.toLowerCase()
+        )
+    ) {
+        addUserMessage(
+            cleaned
+        );
+
+        resetLiveHandoffIntake();
+
+        addAssistantMessage(
+            "No problem — I cancelled the IRD live-support request.",
+            [],
+            {
+                countUnread: false
+            }
+        );
+
+        return true;
+    }
+
+
+    // ---------------------------------------------------------
+    // First name
+    // ---------------------------------------------------------
+
+    if (
+        liveHandoffIntake.step ===
+        "first_name"
+    ) {
+        if (
+            !validateHandoffFirstName(
+                cleaned
+            )
+        ) {
+            addAssistantMessage(
+                "**Please enter your first name only.**\n" +
+                "Letters, apostrophes and hyphens are accepted.",
+                [],
+                {
+                    countUnread: false
+                }
+            );
+
+            return true;
+        }
+
+        addUserMessage(
+            cleaned
+        );
+
+        liveHandoffIntake.first_name =
+            cleaned.slice(
+                0,
+                50
+            );
+
+        liveHandoffIntake.step =
+            "last_name";
+
+        addAssistantMessage(
+            "**Thank you. What is your last name?**",
+            [],
+            {
+                countUnread: false
+            }
+        );
+
+        chatInput.value = "";
+
+        return true;
+    }
+
+
+    // ---------------------------------------------------------
+    // Last name
+    // ---------------------------------------------------------
+
+    if (
+        liveHandoffIntake.step ===
+        "last_name"
+    ) {
+        if (
+            !validateHandoffLastName(
+                cleaned
+            )
+        ) {
+            addAssistantMessage(
+                "**Please enter your last name.**\n" +
+                "Letters, spaces, apostrophes and hyphens are accepted.",
+                [],
+                {
+                    countUnread: false
+                }
+            );
+
+            return true;
+        }
+
+        addUserMessage(
+            cleaned
+        );
+
+        liveHandoffIntake.last_name =
+            cleaned.slice(
+                0,
+                70
+            );
+
+        liveHandoffIntake.contact_name = (
+            `${liveHandoffIntake.first_name} ` +
+            `${liveHandoffIntake.last_name}`
+        ).trim();
+
+        liveHandoffIntake.step =
+            "email";
+
+        addAssistantMessage(
+            "**What email address should the IRD representative use if follow-up is needed?**",
+            [],
+            {
+                countUnread: false
+            }
+        );
+
+        chatInput.value = "";
+
+        return true;
+    }
+
+
+    // ---------------------------------------------------------
+    // Email address
+    // ---------------------------------------------------------
+
+    if (
+        liveHandoffIntake.step ===
+        "email"
+    ) {
+        if (
+            !validateHandoffEmail(
+                cleaned
+            )
+        ) {
+            addAssistantMessage(
+                "**That email address does not look valid.**\n" +
+                "Please enter it again, for example: `name@example.com`, or type **cancel**.",
+                [],
+                {
+                    countUnread: false
+                }
+            );
+
+            return true;
+        }
+
+        addUserMessage(
+            cleaned
+        );
+
+        liveHandoffIntake.contact_email =
+            cleaned
+                .toLowerCase()
+                .slice(
+                    0,
+                    200
+                );
+
+        liveHandoffIntake.step =
+            "issue";
+
+        addAssistantMessage(
+            "**Briefly describe the issue you want the IRD representative to help with.**\n" +
+            "Please do not include passwords, card details, security codes, authentication codes or private taxpayer identifiers.",
+            [],
+            {
+                countUnread: false
+            }
+        );
+
+        chatInput.value = "";
+
+        return true;
+    }
+
+
+    // ---------------------------------------------------------
+    // Issue description
+    // ---------------------------------------------------------
+
+    if (
+        liveHandoffIntake.step ===
+        "issue"
+    ) {
+        if (
+            cleaned.length < 5
+        ) {
+            addAssistantMessage(
+                "**Please give the IRD representative a little more detail about the issue.**",
+                [],
+                {
+                    countUnread: false
+                }
+            );
+
+            return true;
+        }
+
+        addUserMessage(
+            cleaned
+        );
+
+        liveHandoffIntake.issue =
+            cleaned.slice(
+                0,
+                1000
+            );
+
+        const intake = {
+            ...liveHandoffIntake
+        };
+
+        resetLiveHandoffIntake();
+
+        addAssistantMessage(
+            "**Thank you. I’m placing you in the IRD support queue now.**",
+            [],
+            {
+                countUnread: false
+            }
+        );
+
+        await beginLiveChatSession(
+            "Chat with IRD",
+            intake,
+            {
+                alreadyDisplayed: true
+            }
+        );
+
+        return true;
+    }
+
+    return true;
+}
+
+
+async function beginLiveChatSession(
+    displayText = "Chat with IRD",
+    intake = null,
+    options = {}
+) {
+    if (sessionEnded) {
+        return;
+    }
+
+    if (
+        liveChatState === "queued" ||
+        liveChatState === "active"
+    ) {
+        return;
+    }
+
+    deactivateVoiceMode({ silent: true });
+
+    // A live-support request counts as activity and cancels any pending
+    // A.I.D.A. inactivity warning/countdown.
+    stillTherePromptActive = false;
+    clearInactivityTimer();
+    clearDisconnectCountdown();
+    removeTimeoutBanner();
+    closeHelpDrawer();
+
+    if (!options.alreadyDisplayed) {
+        addUserMessage(displayText);
+    }
+
+    chatInput.value = "";
+
+    try {
+        const response = await fetch(
+            "/api/live-chat/request",
+            {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json"
+                },
+                body: JSON.stringify({
+                    session_id: sessionId,
+                    history: conversationHistory.slice(-8),
+                    first_name:
+                        intake?.first_name || "",
+                    last_name:
+                        intake?.last_name || "",
+                    contact_name:
+                        intake?.contact_name || "",
+                    contact_email:
+                        intake?.contact_email || "",
+                    issue:
+                        intake?.issue || "",
+                    language:
+                        selectedLanguage || "en"
+                })
+            }
+        );
+
+        const payload = await response.json();
+
+        if (!response.ok) {
+            throw new Error(
+                payload.error ||
+                "IRD live support is unavailable right now."
+            );
+        }
+
+        liveChatState = payload.status === "active"
+            ? "active"
+            : "queued";
+
+        renderLiveChatBanner(payload);
+
+        addAssistantMessage(
+            liveChatState === "active"
+                ? (
+                    "You’re connected to **IRD staff**. " +
+                    "Your next messages will go directly to the representative."
+                )
+                : (
+                    "You’ve joined the **IRD live-support queue**. " +
+                    "An administrator can accept your ticket from the staff dashboard. " +
+                    "You can type a message while you wait."
+                ),
+            [],
+            { countUnread: false }
+        );
+
+        startLiveChatPolling();
+        chatInput.focus();
+
+    } catch (error) {
+        resetLiveChatLocalState();
+        scheduleInactivityWarning();
+
+        addAssistantMessage(
+            error.message ||
+            "IRD live support is unavailable right now."
+        );
+    }
+}
+
+
+async function sendLiveChatUserMessage(messageText) {
+    const cleaned = String(messageText || "").trim();
+
+    if (!cleaned) {
+        return;
+    }
+
+    addUserMessage(cleaned);
+    chatInput.value = "";
+
+    try {
+        const response = await fetch(
+            "/api/live-chat/message",
+            {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json"
+                },
+                body: JSON.stringify({
+                    session_id: sessionId,
+                    message: cleaned
+                })
+            }
+        );
+
+        const payload = await response.json();
+
+        if (!response.ok) {
+            throw new Error(
+                payload.error ||
+                "Your live-chat message could not be sent."
+            );
+        }
+
+    } catch (error) {
+        addAssistantMessage(
+            error.message ||
+            "Your live-chat message could not be sent."
+        );
+    }
+}
+
+
+async function endLiveChatSession(options = {}) {
+    if (
+        liveChatState !== "queued" &&
+        liveChatState !== "active"
+    ) {
+        return;
+    }
+
+    try {
+        await fetch(
+            "/api/live-chat/end",
+            {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json"
+                },
+                body: JSON.stringify({
+                    session_id: sessionId
+                })
+            }
+        );
+    } catch {
+        // Reset locally even if the request cannot reach the server.
+    }
+
+    resetLiveChatLocalState();
+    scheduleInactivityWarning();
+
+    if (!options.silent && !sessionEnded) {
+        addAssistantMessage(
+            "**Live chat ended.**\n" +
+            "You’re back with A.I.D.A. and can continue asking questions here.",
+            [],
+            { countUnread: false }
+        );
+    }
+}
+
+
 // ---------------------------------------------------------
 // Chat API
 // ---------------------------------------------------------
@@ -2644,7 +3895,10 @@ async function requestAidaResponse(
                         conversationHistory.slice(-8),
                     voice_mode: Boolean(
                         options.voiceMode
-                    )
+                    ),
+                    language:
+                        selectedLanguage ||
+                        "en"
                 }
             )
         }
@@ -2704,6 +3958,68 @@ async function submitMessage(
 
     registerUserActivity();
 
+    if (liveHandoffIntake) {
+        await handleLiveHandoffIntake(
+            cleanedDisplayText
+        );
+
+        chatInput.value = "";
+        return;
+    }
+
+    if (
+        [
+            "change language",
+            "change my language",
+            "cambiar idioma",
+            "cambiar el idioma",
+            "更改语言",
+            "切换语言"
+        ].includes(
+            cleanedQuestion
+                .toLowerCase()
+                .trim()
+        )
+    ) {
+        changeLanguage();
+        return;
+    }
+
+    if (isLiveChatEndRequest(cleanedQuestion)) {
+        if (
+            liveChatState === "queued" ||
+            liveChatState === "active"
+        ) {
+            addUserMessage(cleanedDisplayText);
+            chatInput.value = "";
+            await endLiveChatSession();
+        } else {
+            addAssistantMessage(
+                "There is no active IRD live-support session to end.",
+                [],
+                { countUnread: false }
+            );
+        }
+        return;
+    }
+
+    if (
+        liveChatState === "queued" ||
+        liveChatState === "active"
+    ) {
+        await sendLiveChatUserMessage(
+            cleanedDisplayText
+        );
+        return;
+    }
+
+    if (isLiveChatRequest(cleanedQuestion)) {
+        startLiveHandoffIntake(
+            cleanedDisplayText
+        );
+        return;
+    }
+
     closeHelpDrawer();
 
     addUserMessage(cleanedDisplayText);
@@ -2712,22 +4028,43 @@ async function submitMessage(
     setWaitingState(true);
     showTypingIndicator();
 
+    if (voiceModeActive) {
+        updateVoiceModeStatus(
+            "A.I.D.A. is thinking…"
+        );
+    }
+
     try {
         const result = await requestAidaResponse(
             cleanedQuestion,
             options
         );
 
-        // Leave the thinking animation on screen briefly so the
-        // answer feels natural without making the visitor wait.
-        const responseDelay = Math.min(
-            950,
-            360 + Math.floor(
-                result.answer.length / 22
-            )
+        // Start Gemini speech generation as soon as the text exists.
+        // For normal chat this warms the Listen button while the visitor
+        // reads. In Voice Mode the playback function shares this same
+        // in-flight request instead of starting a second TTS call.
+        const speechWarmup =
+            prefetchSpeechAudio(
+                result.answer
+            );
+
+        // Voice Mode should not sit through the old artificial delay.
+        // Typed chat keeps only a very small visual transition.
+        const responseDelay = (
+            options.voiceMode
+                ? 0
+                : Math.min(
+                    380,
+                    120 + Math.floor(
+                        result.answer.length / 45
+                    )
+                )
         );
 
-        await wait(responseDelay);
+        if (responseDelay > 0) {
+            await wait(responseDelay);
+        }
 
         removeTypingIndicator();
 
@@ -2787,17 +4124,22 @@ function loadInitialConversation() {
 
     chatMessages.replaceChildren();
     conversationHistory = [];
+    conversationAutoScrollPaused = false;
+
+    const option = getSelectedLanguageOption();
+
+    chatInput.placeholder =
+        option.placeholder;
 
     addAssistantMessage(
-        "Hello! 👋 I’m **A.I.D.A.**, your Anguilla Inland Revenue " +
-        "Assistant. I’m here to help with tax information, licences, " +
-        "payments and forms.\n\n" +
-        "**How can I assist you today?**",
+        option.greeting,
         [],
         {
             countUnread: false
         }
     );
+
+    scrollConversationToBottom(true);
 }
 
 
@@ -2806,6 +4148,14 @@ function resetConversation() {
         return;
     }
 
+    if (
+        liveChatState === "queued" ||
+        liveChatState === "active"
+    ) {
+        void endLiveChatSession({ silent: true });
+    }
+
+    resetLiveChatLocalState();
     loadInitialConversation();
     chatInput.focus();
 }
@@ -2824,6 +4174,16 @@ closeButton.addEventListener(
     "click",
     closeChatbot
 );
+
+endChatButton?.addEventListener(
+    "click",
+    () => {
+        void endAidaSession(
+            "user_ended"
+        );
+    }
+);
+
 
 minimiseButton.addEventListener(
     "click",
@@ -2902,9 +4262,60 @@ document.addEventListener(
 );
 
 
+languageChoiceButtons.forEach(
+    (button) => {
+        button.addEventListener(
+            "click",
+            () => {
+                renderTermsForLanguage(
+                    button.dataset.language
+                );
+            }
+        );
+    }
+);
+
+
+termsAgreeCheckbox?.addEventListener(
+    "change",
+    () => {
+        termsContinueButton.disabled = !(
+            selectedLanguage &&
+            termsAgreeCheckbox.checked
+        );
+    }
+);
+
+
+termsContinueButton?.addEventListener(
+    "click",
+    acceptLanguageTerms
+);
+
+
 // ---------------------------------------------------------
 // User activity monitoring
 // ---------------------------------------------------------
+
+chatMessages.addEventListener(
+    "scroll",
+    () => {
+        if (
+            performance.now() <
+            ignoreConversationScrollUntil
+        ) {
+            return;
+        }
+
+        conversationAutoScrollPaused = (
+            !conversationIsNearBottom()
+        );
+    },
+    {
+        passive: true
+    }
+);
+
 
 chatInput.addEventListener(
     "input",
@@ -2951,5 +4362,14 @@ document.addEventListener(
 
 buildHelpDrawer();
 setMicrophoneState("idle");
-loadInitialConversation();
 loadSpeechStatus();
+
+if (termsAccepted) {
+    hideLanguageTermsGate();
+    setConversationControlsDisabled(false);
+    loadInitialConversation();
+
+} else {
+    chatMessages.replaceChildren();
+    showLanguageTermsGate();
+}

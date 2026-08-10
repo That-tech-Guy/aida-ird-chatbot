@@ -1,0 +1,47 @@
+﻿timestamp,response_id,topic,language,form_requested,is_escalated,user_question,assistant_answer
+2026-08-09T19:51:50.233394+00:00,2888845b-ac5d-4389-bb6b-80dd615473f6,General Inquiry,en,None,False,What are the IRD office hours and contact details?,"**Office Hours and Contact Information**
+
+The Inland Revenue Department (IRD) is available to assist you during the following times:
+
+*   **Office Hours:** Monday to Friday, 8:00 a.m. to 3:00 p.m.
+*   **Location:** Ground floor of the Former NBA Building, The Valley, Anguilla.
+*   **Mailing Address:** P.O. Box 60, The Valley, Anguilla.
+*   **Telephone:** 264-497-8334
+*   **Email:** [inlandrevenue@gov.ai](mailto:inlandrevenue@gov.ai)
+
+For further information, you may also visit the official [IRD Contact page](https://ird.gov.ai/Home/Contact)."
+2026-08-09T22:59:33.378416+00:00,dd971ea9-af6e-46f4-8fad-3362bf9a9757,General Inquiry,en,None,False,hi,"您好！我是安圭拉税务局（Inland Revenue Department, IRD）的智能客服助手。我可以为您提供有关税务、牌照及相关服务的指导。
+
+请问有什么我可以帮您的吗？例如：
+
+*   **税务服务**：如商品及服务税 (GST)、通用服务税 (General Services Tax)、通用社会征费 (USL) 或财产税。
+*   **牌照申请**：如商业牌照、酒类牌照或车辆牌照。
+*   **在线服务**：如何注册或使用税务局在线门户网站。
+*   **表格与指南**：如何查找所需的税务表格。
+
+如果您有具体的问题，请随时告诉我。
+
+*(请注意：出于隐私和安全考虑，我无法访问您的个人税务账户、余额或处理具体的申请。对于涉及账户的具体问题，建议您直接联系税务局。)*"
+2026-08-10T02:10:45.391861+00:00,bfd6419a-5f00-4b09-85be-3fd6b2fdcc8d,General Inquiry,en,Application for Special Liquor Licence,False,hi theere,"Hello! I am the Inland Revenue Department (IRD) virtual assistant for Anguilla. I am here to help you with information regarding our services, such as:
+
+*   **Tax Services:** Goods and Services Tax (GST), General Services Tax, Property Tax, and the Universal Social Levy (USL).
+*   **Licensing:** Business and Liquor Licences, and Motor Vehicle or Driver's Licences.
+*   **General Procedures:** How to register as a taxpayer, how to file returns, or how to access our online portal.
+
+**How can I assist you today?**
+
+*Please note: I cannot access your personal taxpayer records, verify your identity, or process payments. For account-specific enquiries, please contact the IRD directly.*"
+2026-08-10T02:11:43.948224+00:00,a65c3e17-c1a3-4e08-bfea-c124a024e964,General Inquiry,en,None,True,Joe schinider,"Hello! I am the Inland Revenue Department (IRD) virtual assistant for Anguilla. 
+
+I am unable to access personal taxpayer records or verify individual identities. If you are looking for assistance with a specific tax account, registration, or a personal enquiry, please contact the Inland Revenue Department directly:
+
+*   **Telephone:** 264-497-8334
+*   **Email:** inlandrevenue@gov.ai
+*   **Office Location:** Ground floor of the Former NBA Building, The Valley, Anguilla.
+*   **Office Hours:** Monday to Friday, 8:00 a.m. to 3:00 p.m.
+
+**How can I assist you with general information today?** For example, I can provide guidance on:
+*   How to register as a taxpayer.
+*   How to apply for or renew a business licence.
+*   General information on GST, Property Tax, or the Universal Social Levy.
+*   How to use the IRD online portal."

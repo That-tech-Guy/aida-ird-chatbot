@@ -1,0 +1,79 @@
+{
+  "queue": [
+    "83a460b3-f487-4785-913a-f435eae5f569"
+  ],
+  "sessions": {
+    "81cd2dfe-3db8-4d3e-8992-3484132ca614": {
+      "status": "ended",
+      "created_at": "2026-08-09T22:16:05.382236+00:00",
+      "accepted_at": "2026-08-09T22:16:47.846095+00:00",
+      "ended_at": "2026-08-09T22:59:55.693826+00:00",
+      "messages": [
+        {
+          "id": "8c1f4e9f-bd24-4a3e-89b8-89d318d19ba3",
+          "role": "admin",
+          "content": "An IRD staff representative has joined the live chat. How can I assist you today?",
+          "source": "live",
+          "timestamp": "2026-08-09T22:16:47.846130+00:00"
+        },
+        {
+          "id": "72f4a56b-3560-458a-aa7b-5b251e6171e6",
+          "role": "admin",
+          "content": "how may we assist you todday?",
+          "source": "live",
+          "timestamp": "2026-08-09T22:17:12.446634+00:00"
+        },
+        {
+          "id": "6897e63d-3d91-4a92-9bdf-efcf0217fb15",
+          "role": "user",
+          "content": "How do I pay Property Tax?",
+          "source": "live",
+          "timestamp": "2026-08-09T22:19:32.303316+00:00"
+        },
+        {
+          "id": "96ac0abc-752d-4417-b626-eb7b5d6ae1e4",
+          "role": "user",
+          "content": "how may I help you today",
+          "source": "live",
+          "timestamp": "2026-08-09T22:21:06.892780+00:00"
+        },
+        {
+          "id": "e3db31b3-9810-4264-9733-0be6e4b4224e",
+          "role": "admin",
+          "content": "The IRD staff representative has ended the live chat. You are now reconnected with A.I.D.A.",
+          "source": "live",
+          "timestamp": "2026-08-09T22:59:55.693865+00:00"
+        }
+      ]
+    },
+    "4023ce22-f3db-4dcc-9740-6d71b40f647a": {
+      "status": "ended",
+      "created_at": "2026-08-09T22:57:28.774436+00:00",
+      "accepted_at": "2026-08-09T22:58:47.866870+00:00",
+      "ended_at": "2026-08-09T22:59:18.383866+00:00",
+      "messages": [
+        {
+          "id": "8c1704f8-9389-423c-8394-518915e2a321",
+          "role": "admin",
+          "content": "An IRD staff representative has joined the live chat. How can I assist you today?",
+          "source": "live",
+          "timestamp": "2026-08-09T22:58:47.866958+00:00"
+        },
+        {
+          "id": "6aa1f21b-15e8-4d9f-9d5e-77b66fa2383c",
+          "role": "admin",
+          "content": "The IRD staff representative has ended the live chat. You are now reconnected with A.I.D.A.",
+          "source": "live",
+          "timestamp": "2026-08-09T22:59:18.383902+00:00"
+        }
+      ]
+    },
+    "83a460b3-f487-4785-913a-f435eae5f569": {
+      "status": "queued",
+      "created_at": "2026-08-09T22:57:53.468988+00:00",
+      "accepted_at": "",
+      "ended_at": "",
+      "messages": []
+    }
+  }
+}

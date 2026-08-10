@@ -1,0 +1,498 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="aida-admin-authenticated" content="{{ 'true' if authenticated else 'false' }}">
+    <meta name="aida-admin-configured" content="{{ 'true' if admin_configured else 'false' }}">
+    <meta name="aida-admin-csrf" content="{{ csrf_token }}">
+    <meta name="aida-persistence-configured" content="{{ 'true' if persistence_configured else 'false' }}">
+
+    <title>A.I.D.A. Staff Administration</title>
+
+    <link
+        rel="stylesheet"
+        href="{{ url_for('static', filename='css/admin.css') }}"
+    >
+</head>
+<body>
+    <div class="admin-shell">
+        <header class="admin-header">
+            <div class="admin-brand">
+                <img
+                    src="{{ url_for('static', filename='images/aida_logo.jpeg') }}"
+                    alt="A.I.D.A."
+                    class="admin-logo"
+                >
+
+                <div>
+                    <span class="admin-eyebrow">Anguilla Inland Revenue Department</span>
+                    <h1>A.I.D.A. Staff Console</h1>
+                    <p>Knowledge, analytics, feedback, deadlines and live support</p>
+                </div>
+            </div>
+
+            {% if authenticated %}
+            <div class="admin-header-actions">
+                <a class="admin-secondary-button" href="/" target="_blank" rel="noopener">
+                    Open public chatbot
+                </a>
+                <button class="admin-danger-button" id="admin-logout-button" type="button">
+                    Sign out
+                </button>
+            </div>
+            {% endif %}
+        </header>
+
+        {% if not authenticated %}
+        <main class="admin-login-layout">
+            <section class="admin-login-card">
+                <div class="admin-lock-icon" aria-hidden="true">🔒</div>
+                <h2>Staff access</h2>
+                <p>
+                    Sign in to manage A.I.D.A.'s approved knowledge and view
+                    anonymous service analytics.
+                </p>
+
+                {% if not admin_configured %}
+                <div class="admin-alert admin-alert-warning">
+                    <strong>Admin access is not configured.</strong>
+                    Add <code>ADMIN_PASSWORD</code> and
+                    <code>FLASK_SECRET_KEY</code> to your local secrets or
+                    Render environment variables, then restart the service.
+                </div>
+                {% endif %}
+
+                <form id="admin-login-form" class="admin-login-form">
+                    <label for="admin-password">Staff password</label>
+                    <input
+                        id="admin-password"
+                        name="password"
+                        type="password"
+                        autocomplete="current-password"
+                        required
+                        {% if not admin_configured %}disabled{% endif %}
+                    >
+
+                    <button
+                        type="submit"
+                        class="admin-primary-button"
+                        {% if not admin_configured %}disabled{% endif %}
+                    >
+                        Sign in
+                    </button>
+
+                    <p id="admin-login-status" class="admin-form-status" aria-live="polite"></p>
+                </form>
+            </section>
+        </main>
+
+        {% else %}
+        <div class="admin-workspace">
+            <nav class="admin-sidebar" aria-label="Staff console sections">
+                <button class="admin-nav-button is-active" data-admin-tab="overview" type="button">
+                    <span>📊</span> Overview
+                </button>
+                <button class="admin-nav-button" data-admin-tab="knowledge" type="button">
+                    <span>📚</span> Knowledge Base
+                </button>
+                <button class="admin-nav-button" data-admin-tab="forms-content" type="button">
+                    <span>🗂️</span> Forms & Content
+                </button>
+                <button class="admin-nav-button" data-admin-tab="deadlines" type="button">
+                    <span>🎯</span> Tax Deadlines
+                </button>
+                <button class="admin-nav-button" data-admin-tab="live-chat" type="button">
+                    <span>💬</span> Live Support
+                    <span id="admin-queue-badge" class="admin-nav-badge" hidden>0</span>
+                </button>
+                <button class="admin-nav-button" data-admin-tab="sessions" type="button">
+                    <span>🕘</span> Session Archive
+                </button>
+                <button class="admin-nav-button" data-admin-tab="feedback" type="button">
+                    <span>⭐</span> Feedback
+                </button>
+
+                <div class="admin-sidebar-note">
+                    <strong>{{ "Supabase persistence" if persistence_configured else "Local fallback storage" }}</strong>
+                    <span>
+                        {% if persistence_configured %}
+                        Live-support history and staff-managed content are persisted outside Render's temporary filesystem.
+                        {% else %}
+                        A.I.D.A. still works, but live history and uploaded admin content can be lost after a Render restart. Configure Supabase when ready.
+                        {% endif %}
+                    </span>
+                </div>
+            </nav>
+
+            <main class="admin-content">
+                <section class="admin-panel is-active" data-admin-panel="overview">
+                    <div class="admin-panel-heading">
+                        <div>
+                            <span class="admin-section-kicker">Community questions</span>
+                            <h2>Management overview</h2>
+                        </div>
+                        <div class="admin-panel-actions">
+                            <button class="admin-secondary-button" id="refresh-analytics-button" type="button">
+                                Refresh
+                            </button>
+                            <a class="admin-secondary-button" href="/api/admin/analytics/download">
+                                Download analytics CSV
+                            </a>
+                        </div>
+                    </div>
+
+                    <div class="admin-metric-grid">
+                        <article class="admin-metric-card">
+                            <span>Total enquiries</span>
+                            <strong id="metric-total-queries">0</strong>
+                        </article>
+                        <article class="admin-metric-card">
+                            <span>Answered rate</span>
+                            <strong id="metric-answered-rate">0%</strong>
+                        </article>
+                        <article class="admin-metric-card">
+                            <span>Escalated / unverified</span>
+                            <strong id="metric-escalated">0</strong>
+                        </article>
+                        <article class="admin-metric-card">
+                            <span>Spanish queries</span>
+                            <strong id="metric-spanish">0</strong>
+                        </article>
+                    </div>
+
+                    <div class="admin-two-column-grid">
+                        <article class="admin-card">
+                            <div class="admin-card-heading">
+                                <h3>🔥 Top topics</h3>
+                                <span>Most frequently discussed services</span>
+                            </div>
+                            <div id="analytics-topics" class="admin-ranked-list"></div>
+                        </article>
+
+                        <article class="admin-card">
+                            <div class="admin-card-heading">
+                                <h3>📄 Requested forms</h3>
+                                <span>Forms matched to public enquiries</span>
+                            </div>
+                            <div id="analytics-forms" class="admin-ranked-list"></div>
+                        </article>
+                    </div>
+
+                    <article class="admin-card">
+                        <div class="admin-card-heading">
+                            <h3>❓ Escalated or unverified questions</h3>
+                            <span>Useful candidates for reviewed knowledge-base updates</span>
+                        </div>
+                        <div class="admin-table-wrap">
+                            <table class="admin-data-table">
+                                <thead>
+                                    <tr>
+                                        <th>Time</th>
+                                        <th>Topic</th>
+                                        <th>Question</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="analytics-escalated-body"></tbody>
+                            </table>
+                        </div>
+                    </article>
+                </section>
+
+                <section class="admin-panel" data-admin-panel="knowledge">
+                    <div class="admin-panel-heading">
+                        <div>
+                            <span class="admin-section-kicker">Approved information</span>
+                            <h2>Knowledge Base Editor</h2>
+                        </div>
+                        <div class="admin-panel-actions">
+                            <button class="admin-secondary-button" id="kb-add-row-button" type="button">+ Add row</button>
+                            <button class="admin-primary-button" id="kb-save-button" type="button">Save & apply</button>
+                        </div>
+                    </div>
+
+                    <div class="admin-toolbar-card">
+                        <label class="admin-file-control">
+                            <span>Replace knowledge-base CSV</span>
+                            <input id="kb-upload-input" type="file" accept=".csv,text/csv">
+                        </label>
+                        <button id="kb-upload-button" class="admin-secondary-button" type="button">Upload CSV</button>
+                        <a class="admin-secondary-button" href="/api/admin/knowledge-base/download">Download current CSV</a>
+                        <span id="kb-status" class="admin-form-status" aria-live="polite"></span>
+                    </div>
+
+                    <div class="admin-alert admin-alert-info">
+                        Saving here updates the CSV used by the Flask chatbot. New approved answers are picked up on the next A.I.D.A. response without restarting the server.
+                    </div>
+
+                    <div class="admin-table-wrap admin-editor-wrap">
+                        <table class="admin-data-table admin-editor-table">
+                            <thead id="kb-table-head"></thead>
+                            <tbody id="kb-table-body"></tbody>
+                        </table>
+                    </div>
+                </section>
+
+                <section class="admin-panel" data-admin-panel="forms-content">
+                    <div class="admin-panel-heading">
+                        <div>
+                            <span class="admin-section-kicker">Public content</span>
+                            <h2>Forms & Content Manager</h2>
+                        </div>
+                        <button class="admin-primary-button" id="forms-save-button" type="button">Save forms</button>
+                    </div>
+
+                    <div class="admin-alert admin-alert-info">
+                        Edit A.I.D.A.'s approved forms, prompts and public assets here. Application code, API keys and staff passwords are deliberately not editable in the browser.
+                    </div>
+
+                    <article class="admin-card">
+                        <div class="admin-card-heading">
+                            <h3>📄 Forms catalogue</h3>
+                            <span>Edit form matching and the official/fillable form details used by the chatbot.</span>
+                        </div>
+                        <div id="forms-editor" class="admin-form-card-list"></div>
+                        <div class="admin-panel-actions admin-inline-actions">
+                            <button class="admin-secondary-button" id="forms-add-button" type="button">+ Add form</button>
+                            <span id="forms-status" class="admin-form-status" aria-live="polite"></span>
+                        </div>
+                    </article>
+
+                    <div class="admin-two-column-grid">
+                        <article class="admin-card">
+                            <div class="admin-card-heading">
+                                <h3>📝 Prompt & supporting text</h3>
+                                <span>Edit approved text without opening the server filesystem.</span>
+                            </div>
+
+                            <label class="admin-field-label" for="content-text-select">Editable file</label>
+                            <select id="content-text-select" class="admin-select">
+                                <option value="master_prompt">Master prompt</option>
+                                <option value="web_addendum">Web prompt addendum</option>
+                                <option value="web_knowledge_additions">Web/forms knowledge additions</option>
+                            </select>
+
+                            <textarea id="content-text-editor" class="admin-large-textarea" rows="16" spellcheck="false"></textarea>
+
+                            <div class="admin-panel-actions admin-inline-actions">
+                                <button class="admin-primary-button" id="content-text-save-button" type="button">Save text</button>
+                                <span id="content-text-status" class="admin-form-status" aria-live="polite"></span>
+                            </div>
+                        </article>
+
+                        <article class="admin-card">
+                            <div class="admin-card-heading">
+                                <h3>🖼️ Images & fillable PDFs</h3>
+                                <span>Replace chatbot artwork or upload a fillable PDF. Supabase keeps these files across Render restarts when configured.</span>
+                            </div>
+
+                            <label class="admin-field-label" for="asset-path-input">Destination path</label>
+                            <input id="asset-path-input" class="admin-text-input" type="text" placeholder="static/forms/fillable/Example_Fillable.pdf">
+
+                            <div class="admin-asset-shortcuts">
+                                <button type="button" data-asset-path="static/images/aida_logo.jpeg">A.I.D.A. logo</button>
+                                <button type="button" data-asset-path="static/images/header/anguilla-map.png">Anguilla map</button>
+                                <button type="button" data-asset-path="static/images/header/document.png">Document icon</button>
+                                <button type="button" data-asset-path="static/images/header/bank.png">Bank icon</button>
+                                <button type="button" data-asset-path="static/images/header/revenue.png">Revenue icon</button>
+                            </div>
+
+                            <input id="asset-upload-input" type="file" accept=".pdf,.png,.jpg,.jpeg,application/pdf,image/png,image/jpeg">
+                            <button class="admin-primary-button" id="asset-upload-button" type="button">Upload / replace file</button>
+                            <span id="asset-upload-status" class="admin-form-status" aria-live="polite"></span>
+
+                            <div class="admin-card-heading admin-live-secondary-heading">
+                                <h3>Managed files</h3>
+                            </div>
+                            <div id="managed-files-list" class="admin-ranked-list"></div>
+                        </article>
+                    </div>
+                </section>
+
+                <section class="admin-panel" data-admin-panel="deadlines">
+                    <div class="admin-panel-heading">
+                        <div>
+                            <span class="admin-section-kicker">Administrative schedule</span>
+                            <h2>Tax Deadlines Editor</h2>
+                        </div>
+                        <div class="admin-panel-actions">
+                            <button class="admin-secondary-button" id="deadline-add-row-button" type="button">+ Add deadline</button>
+                            <button class="admin-primary-button" id="deadline-save-button" type="button">Save deadlines</button>
+                        </div>
+                    </div>
+
+                    <div class="admin-alert admin-alert-warning">
+                        The starter deadline rows were copied from the Khan prototype. Review them against current official IRD information before publishing or using them as authoritative dates.
+                    </div>
+
+                    <div class="admin-toolbar-card">
+                        <label class="admin-file-control">
+                            <span>Replace deadlines CSV</span>
+                            <input id="deadline-upload-input" type="file" accept=".csv,text/csv">
+                        </label>
+                        <button id="deadline-upload-button" class="admin-secondary-button" type="button">Upload CSV</button>
+                        <a class="admin-secondary-button" href="/api/admin/deadlines/download">Download deadlines CSV</a>
+                        <span id="deadline-status" class="admin-form-status" aria-live="polite"></span>
+                    </div>
+
+                    <div class="admin-table-wrap admin-editor-wrap">
+                        <table class="admin-data-table admin-editor-table">
+                            <thead id="deadline-table-head"></thead>
+                            <tbody id="deadline-table-body"></tbody>
+                        </table>
+                    </div>
+                </section>
+
+                <section class="admin-panel" data-admin-panel="live-chat">
+                    <div class="admin-panel-heading">
+                        <div>
+                            <span class="admin-section-kicker">Human handoff</span>
+                            <h2>IRD Live Support</h2>
+                        </div>
+                        <button class="admin-secondary-button" id="refresh-live-chat-button" type="button">Refresh now</button>
+                    </div>
+
+                    <div class="admin-live-layout">
+                        <article class="admin-card admin-live-list-card">
+                            <div class="admin-card-heading">
+                                <h3>Waiting queue</h3>
+                                <span id="live-queue-caption">0 waiting</span>
+                            </div>
+                            <div id="admin-live-queue" class="admin-ticket-list"></div>
+
+                            <div class="admin-card-heading admin-live-secondary-heading">
+                                <h3>Active sessions</h3>
+                            </div>
+                            <div id="admin-live-active" class="admin-ticket-list"></div>
+                        </article>
+
+                        <article class="admin-card admin-live-conversation-card">
+                            <div class="admin-card-heading admin-live-chat-heading">
+                                <div>
+                                    <h3 id="admin-live-title">Select a ticket</h3>
+                                    <span id="admin-live-subtitle">Waiting and active conversations appear on the left.</span>
+                                </div>
+                                <button id="admin-live-end-button" class="admin-danger-button" type="button" hidden>End session</button>
+                            </div>
+
+                            <div id="admin-live-context" class="admin-live-context" hidden></div>
+
+                            <div id="admin-live-messages" class="admin-live-messages">
+                                <div class="admin-empty-state">No live-support session selected.</div>
+                            </div>
+
+                            <form id="admin-live-message-form" class="admin-live-message-form" hidden>
+                                <input id="admin-live-message-input" type="text" maxlength="4000" placeholder="Type a response to the visitor...">
+                                <button class="admin-primary-button" type="submit">Send</button>
+                            </form>
+                        </article>
+                    </div>
+                </section>
+
+                <section class="admin-panel" data-admin-panel="sessions">
+                    <div class="admin-panel-heading">
+                        <div>
+                            <span class="admin-section-kicker">Previous live handoffs</span>
+                            <h2>Session Archive</h2>
+                        </div>
+                        <button class="admin-secondary-button" id="refresh-sessions-button" type="button">Refresh</button>
+                    </div>
+
+                    <div class="admin-alert admin-alert-info">
+                        Session summaries are generated locally from the staff-handoff record. The archive is not sent back to Gemini for summarisation.
+                    </div>
+
+                    <div class="admin-session-layout">
+                        <article class="admin-card">
+                            <div id="session-archive-list" class="admin-ticket-list"></div>
+                        </article>
+
+                        <article class="admin-card">
+                            <div class="admin-card-heading">
+                                <h3 id="session-archive-title">Select a past session</h3>
+                                <span id="session-archive-subtitle">Ended live-support sessions appear on the left.</span>
+                            </div>
+                            <div id="session-archive-detail" class="admin-session-detail">
+                                <div class="admin-empty-state">No archived session selected.</div>
+                            </div>
+                        </article>
+                    </div>
+                </section>
+
+                <section class="admin-panel" data-admin-panel="feedback">
+                    <div class="admin-panel-heading">
+                        <div>
+                            <span class="admin-section-kicker">Service quality</span>
+                            <h2>User Feedback</h2>
+                        </div>
+                        <div class="admin-panel-actions">
+                            <a class="admin-secondary-button" href="/api/admin/feedback/download">Download response feedback</a>
+                            <a class="admin-secondary-button" href="/api/admin/surveys/download">Download session surveys</a>
+                        </div>
+                    </div>
+
+                    <div class="admin-metric-grid">
+                        <article class="admin-metric-card">
+                            <span>Helpful responses</span>
+                            <strong id="feedback-helpful">0</strong>
+                        </article>
+                        <article class="admin-metric-card">
+                            <span>Not helpful</span>
+                            <strong id="feedback-not-helpful">0</strong>
+                        </article>
+                        <article class="admin-metric-card">
+                            <span>Session surveys</span>
+                            <strong id="feedback-survey-count">0</strong>
+                        </article>
+                        <article class="admin-metric-card">
+                            <span>Average survey</span>
+                            <strong id="feedback-survey-average">—</strong>
+                        </article>
+                    </div>
+
+                    <div class="admin-two-column-grid">
+                        <article class="admin-card">
+                            <div class="admin-card-heading">
+                                <h3>👍 Response feedback</h3>
+                            </div>
+                            <div class="admin-table-wrap">
+                                <table class="admin-data-table">
+                                    <thead>
+                                        <tr>
+                                            <th>Rating</th>
+                                            <th>Question</th>
+                                            <th>Time</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="response-feedback-body"></tbody>
+                                </table>
+                            </div>
+                        </article>
+
+                        <article class="admin-card">
+                            <div class="admin-card-heading">
+                                <h3>⭐ Session surveys</h3>
+                            </div>
+                            <div class="admin-table-wrap">
+                                <table class="admin-data-table">
+                                    <thead>
+                                        <tr>
+                                            <th>Rating</th>
+                                            <th>Comment</th>
+                                            <th>Time</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="session-survey-body"></tbody>
+                                </table>
+                            </div>
+                        </article>
+                    </div>
+                </section>
+            </main>
+        </div>
+        {% endif %}
+    </div>
+
+    <script src="{{ url_for('static', filename='js/admin.js') }}"></script>
+</body>
+</html>

@@ -242,6 +242,19 @@
             <div class="header-controls">
 
                 <button
+                    class="header-control end-chat-control"
+                    id="chat-end-button"
+                    type="button"
+                    aria-label="End this chat"
+                    title="End chat"
+                >
+                    <svg viewBox="0 0 24 24" aria-hidden="true">
+                        <path d="M12 2v9" />
+                        <path d="M6.3 5.7a8 8 0 1 0 11.4 0" />
+                    </svg>
+                </button>
+
+                <button
                     class="header-control"
                     id="chat-minimise-button"
                     type="button"
@@ -293,6 +306,105 @@
                 </button>
             </div>
         </header>
+
+        <!--
+            Language and Terms gate.
+            It occupies the normal conversation area until the visitor
+            chooses a language and accepts the public-use terms.
+        -->
+        <section
+            class="language-terms-gate"
+            id="language-terms-gate"
+            aria-label="Choose language and accept Terms of Use"
+            hidden
+        >
+            <div class="language-gate-card">
+                <div class="language-gate-kicker">
+                    <span aria-hidden="true">🌐</span>
+                    <span>A.I.D.A. · Anguilla Inland Revenue Assistant</span>
+                </div>
+
+                <h2 id="language-gate-title">
+                    Choose your language
+                </h2>
+
+                <p class="language-gate-languages">
+                    English · Español · 中文
+                </p>
+
+                <div
+                    class="language-choice-grid"
+                    role="group"
+                    aria-label="Choose a language"
+                >
+                    <button
+                        class="language-choice"
+                        type="button"
+                        data-language="en"
+                    >
+                        <strong>English</strong>
+                        <span>English</span>
+                    </button>
+
+                    <button
+                        class="language-choice"
+                        type="button"
+                        data-language="es"
+                    >
+                        <strong>Español</strong>
+                        <span>Spanish</span>
+                    </button>
+
+                    <button
+                        class="language-choice"
+                        type="button"
+                        data-language="zh"
+                    >
+                        <strong>中文</strong>
+                        <span>简体中文</span>
+                    </button>
+                </div>
+
+                <div class="terms-panel">
+                    <h3 id="terms-heading">
+                        Terms of Use
+                    </h3>
+
+                    <div
+                        class="terms-copy"
+                        id="terms-copy"
+                    >
+                        Choose a language above to review the terms.
+                    </div>
+
+                    <label class="terms-agreement">
+                        <input
+                            id="terms-agree-checkbox"
+                            type="checkbox"
+                            disabled
+                        >
+
+                        <span id="terms-agree-label">
+                            I agree to the Terms of Use.
+                        </span>
+                    </label>
+
+                    <button
+                        class="terms-continue-button"
+                        id="terms-continue-button"
+                        type="button"
+                        disabled
+                    >
+                        Continue
+                    </button>
+                </div>
+
+                <p class="language-gate-privacy" id="language-gate-privacy">
+                    Please do not enter passwords, card details,
+                    banking information or security codes.
+                </p>
+            </div>
+        </section>
 
         <!-- Conversation -->
         <section
