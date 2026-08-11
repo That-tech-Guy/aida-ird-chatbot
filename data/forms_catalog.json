@@ -14,7 +14,12 @@
     ],
     "official_url": "https://ird.gov.ai/Content/documents/Business%20Licence%20Application%20Form.pdf",
     "fillable_filename": "business-licence-application-fillable.pdf",
-    "featured": true
+    "featured": true,
+    "fillable_filenames": [
+      "business-licence-application-fillable.pdf",
+      "Business_Licence_Application_Form_Fillable (1).pdf",
+      "Business_Licence_Application_Form_Fillable.pdf"
+    ]
   },
   {
     "id": "business-licence-renewal",
@@ -31,7 +36,11 @@
     ],
     "official_url": "https://ird.gov.ai/Content/documents/Business%20Licence%20Renewal%20Application%202024.pdf",
     "fillable_filename": "business-licence-renewal-fillable.pdf",
-    "featured": true
+    "featured": true,
+    "fillable_filenames": [
+      "business-licence-renewal-fillable.pdf",
+      "Business_Licence_Renewal_Application_2024_Fillable.pdf"
+    ]
   },
   {
     "id": "closure-of-business",
@@ -273,7 +282,11 @@
     ],
     "official_url": "https://ird.gov.ai/Content/documents/USL%20-%20Self%20-%20Employed%20Form%202021.pdf",
     "fillable_filename": "usl-self-employed-fillable.pdf",
-    "featured": false
+    "featured": false,
+    "fillable_filenames": [
+      "usl-self-employed-fillable.pdf",
+      "USL_Self_Employed_Form_2021_Fillable.pdf"
+    ]
   },
   {
     "id": "accommodation-tax-register",

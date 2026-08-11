@@ -128,6 +128,39 @@ if (loginForm) {
     const status = document.getElementById(
         "admin-login-status"
     );
+    const passwordToggle = document.getElementById(
+        "admin-password-toggle"
+    );
+
+    passwordToggle?.addEventListener(
+        "click",
+        () => {
+            const showing = (
+                passwordInput.type === "text"
+            );
+
+            passwordInput.type = showing
+                ? "password"
+                : "text";
+
+            passwordToggle.classList.toggle(
+                "is-visible",
+                !showing
+            );
+            passwordToggle.setAttribute(
+                "aria-pressed",
+                String(!showing)
+            );
+            passwordToggle.setAttribute(
+                "aria-label",
+                showing ? "Show password" : "Hide password"
+            );
+            passwordToggle.title = showing
+                ? "Show password"
+                : "Hide password";
+            passwordInput.focus();
+        }
+    );
 
     loginForm.addEventListener(
         "submit",
@@ -926,6 +959,57 @@ if (!adminAuthenticated) {
     }
 
 
+    function visitorDisplayName(sessionData) {
+        return (
+            sessionData?.contact_name ||
+            "Visitor information unavailable"
+        );
+    }
+
+
+    function appendTicketInfoLine(
+        parent,
+        className,
+        text
+    ) {
+        const line = document.createElement("span");
+        line.className = className;
+        line.textContent = text || "—";
+        parent.appendChild(line);
+        return line;
+    }
+
+
+    function liveMessageLabel(message) {
+        if (message.source === "context") {
+            return "Previous A.I.D.A. context";
+        }
+
+        if (message.role === "admin") {
+            return "IRD Staff";
+        }
+
+        if (message.role === "user") {
+            return "Visitor";
+        }
+
+        if (message.role === "system") {
+            return "System";
+        }
+
+        return "A.I.D.A.";
+    }
+
+
+    function statusDisplayText(status) {
+        return ({
+            active: "Active",
+            queued: "Waiting",
+            ended: "Ended"
+        })[status] || "Recorded";
+    }
+
+
     function renderAdminConversation(sessionData) {
         const container = document.getElementById(
             "admin-live-messages"
@@ -951,29 +1035,24 @@ if (!adminAuthenticated) {
         if (!sessionData) {
             const empty = document.createElement("div");
             empty.className = "admin-empty-state";
-            empty.textContent = "Select or accept a live-support ticket.";
+            empty.textContent = "Select or accept a live-support visitor.";
             container.appendChild(empty);
             form.hidden = true;
             endButton.hidden = true;
-            title.textContent = "Select a ticket";
+            title.textContent = "Select a visitor";
             subtitle.textContent = "Waiting and active conversations appear on the left.";
 
             if (context) {
                 context.hidden = true;
                 context.replaceChildren();
             }
-
             return;
         }
 
-        title.textContent = (
-            sessionData.contact_name
-                ? `Live chat · ${sessionData.contact_name}`
-                : `Live chat · ${sessionData.ticket}`
-        );
+        title.textContent = `Live chat · ${visitorDisplayName(sessionData)}`;
         subtitle.textContent = (
-            `Ticket ${sessionData.ticket} · ` +
-            "Messages marked context are the recent A.I.D.A. conversation supplied at handoff."
+            `${sessionData.contact_email || "No email supplied"} · ` +
+            `${statusDisplayText(sessionData.status || "active")}`
         );
         form.hidden = false;
         endButton.hidden = false;
@@ -982,31 +1061,34 @@ if (!adminAuthenticated) {
             context.hidden = false;
             context.replaceChildren();
 
-            const name = document.createElement("strong");
-            name.textContent = (
-                sessionData.contact_name ||
-                "Name not supplied"
-            );
+            const grid = document.createElement("div");
+            grid.className = "admin-live-contact-grid";
 
-            const email = document.createElement("span");
-            email.textContent = (
-                sessionData.contact_email ||
-                "No email supplied"
-            );
+            const fields = [
+                ["Visitor", visitorDisplayName(sessionData)],
+                ["Email", sessionData.contact_email || "No email supplied"],
+                ["Issue", sessionData.issue || "No issue summary supplied"],
+                ["Language", (sessionData.language || "en").toUpperCase()]
+            ];
 
-            const issueLabel = document.createElement("small");
-            issueLabel.textContent = "Issue";
+            fields.forEach(([labelText, valueText]) => {
+                const item = document.createElement("div");
+                item.className = "admin-live-contact-item";
 
-            const issue = document.createElement("p");
-            issue.textContent = (
-                sessionData.issue ||
-                "No issue summary supplied"
-            );
+                const label = document.createElement("small");
+                label.textContent = labelText;
 
-            context.appendChild(name);
-            context.appendChild(email);
-            context.appendChild(issueLabel);
-            context.appendChild(issue);
+                const value = document.createElement(
+                    labelText === "Issue" ? "p" : "strong"
+                );
+                value.textContent = valueText;
+
+                item.appendChild(label);
+                item.appendChild(value);
+                grid.appendChild(item);
+            });
+
+            context.appendChild(grid);
         }
 
         const messages = sessionData.messages || [];
@@ -1034,7 +1116,7 @@ if (!adminAuthenticated) {
             const meta = document.createElement("span");
             meta.className = "admin-live-message-meta";
             meta.textContent = (
-                `${message.source === "context" ? "Previous A.I.D.A. context · " : ""}` +
+                `${liveMessageLabel(message)} · ` +
                 formatAdminTime(message.timestamp)
             );
 
@@ -1051,19 +1133,14 @@ if (!adminAuthenticated) {
         const queue = liveChatPayload.queue || [];
         const active = liveChatPayload.active_sessions || [];
 
-        const badge = document.getElementById(
-            "admin-queue-badge"
-        );
+        const badge = document.getElementById("admin-queue-badge");
         badge.hidden = queue.length === 0;
         badge.textContent = String(queue.length);
 
-        document.getElementById(
-            "live-queue-caption"
-        ).textContent = `${queue.length} waiting`;
+        document.getElementById("live-queue-caption").textContent =
+            `${queue.length} waiting`;
 
-        const queueContainer = document.getElementById(
-            "admin-live-queue"
-        );
+        const queueContainer = document.getElementById("admin-live-queue");
         queueContainer.replaceChildren();
 
         if (!queue.length) {
@@ -1075,23 +1152,30 @@ if (!adminAuthenticated) {
 
         queue.forEach((ticket) => {
             const wrapper = document.createElement("div");
-            wrapper.className = "admin-ticket-button";
+            wrapper.className = "admin-ticket-button admin-person-ticket";
 
             const copy = document.createElement("div");
-            const strong = document.createElement("strong");
-            strong.textContent = (
-                ticket.contact_name ||
-                `Ticket ${ticket.ticket}`
-            );
+            copy.className = "admin-ticket-person-copy";
 
-            const small = document.createElement("span");
-            small.textContent = (
-                `${ticket.issue || "No issue summary"} · ` +
-                `${ticket.message_count || 0} context/messages · ` +
-                formatAdminTime(ticket.created_at)
-            );
+            const strong = document.createElement("strong");
+            strong.textContent = visitorDisplayName(ticket);
             copy.appendChild(strong);
-            copy.appendChild(small);
+
+            appendTicketInfoLine(
+                copy,
+                "admin-ticket-email",
+                ticket.contact_email || "No email supplied"
+            );
+            appendTicketInfoLine(
+                copy,
+                "admin-ticket-issue",
+                ticket.issue || "No issue summary supplied"
+            );
+            appendTicketInfoLine(
+                copy,
+                "admin-ticket-meta",
+                `${ticket.message_count || 0} messages · ${formatAdminTime(ticket.last_activity_at || ticket.created_at)}`
+            );
 
             const accept = document.createElement("button");
             accept.className = "admin-ticket-action";
@@ -1101,9 +1185,7 @@ if (!adminAuthenticated) {
                 "click",
                 async (event) => {
                     event.stopPropagation();
-                    await acceptLiveTicket(
-                        ticket.session_id
-                    );
+                    await acceptLiveTicket(ticket.session_id);
                 }
             );
 
@@ -1112,9 +1194,7 @@ if (!adminAuthenticated) {
             queueContainer.appendChild(wrapper);
         });
 
-        const activeContainer = document.getElementById(
-            "admin-live-active"
-        );
+        const activeContainer = document.getElementById("admin-live-active");
         activeContainer.replaceChildren();
 
         if (!active.length) {
@@ -1126,37 +1206,41 @@ if (!adminAuthenticated) {
 
         active.forEach((ticket) => {
             const button = document.createElement("button");
-            button.className = "admin-ticket-button";
+            button.className = "admin-ticket-button admin-person-ticket";
             button.type = "button";
 
-            if (
-                ticket.session_id ===
-                selectedLiveSessionId
-            ) {
+            if (ticket.session_id === selectedLiveSessionId) {
                 button.classList.add("is-selected");
             }
 
             const copy = document.createElement("div");
-            const strong = document.createElement("strong");
-            strong.textContent = (
-                ticket.contact_name ||
-                `Ticket ${ticket.ticket}`
-            );
+            copy.className = "admin-ticket-person-copy";
 
-            const small = document.createElement("span");
-            small.textContent = (
-                `${ticket.issue || "Live support"} · ` +
-                `${(ticket.messages || []).length} messages · active`
-            );
+            const strong = document.createElement("strong");
+            strong.textContent = visitorDisplayName(ticket);
             copy.appendChild(strong);
-            copy.appendChild(small);
+
+            appendTicketInfoLine(
+                copy,
+                "admin-ticket-email",
+                ticket.contact_email || "No email supplied"
+            );
+            appendTicketInfoLine(
+                copy,
+                "admin-ticket-issue",
+                ticket.issue || "Live support"
+            );
+            appendTicketInfoLine(
+                copy,
+                "admin-ticket-meta",
+                `${(ticket.messages || []).length} messages · Active`
+            );
 
             button.appendChild(copy);
             button.addEventListener(
                 "click",
                 () => {
-                    selectedLiveSessionId =
-                        ticket.session_id;
+                    selectedLiveSessionId = ticket.session_id;
                     renderLiveLists();
                     renderAdminConversation(ticket);
                 }
@@ -1165,8 +1249,7 @@ if (!adminAuthenticated) {
             activeContainer.appendChild(button);
         });
 
-        const selected = selectedActiveSession();
-        renderAdminConversation(selected || null);
+        renderAdminConversation(selectedActiveSession() || null);
     }
 
 
@@ -1295,8 +1378,23 @@ if (!adminAuthenticated) {
                     }
                 );
                 await parseJsonResponse(response);
+
+                const endedSessionId = selectedLiveSessionId;
+                liveChatPayload.active_sessions = (
+                    liveChatPayload.active_sessions || []
+                ).filter(
+                    (session) => session.session_id !== endedSessionId
+                );
+                liveChatPayload.queue = (
+                    liveChatPayload.queue || []
+                ).filter(
+                    (session) => session.session_id !== endedSessionId
+                );
+
                 selectedLiveSessionId = "";
+                renderLiveLists();
                 await refreshLiveChat();
+                await loadSessionArchive();
 
             } catch (error) {
                 window.alert(error.message);
@@ -1898,15 +1996,9 @@ if (!adminAuthenticated) {
 
 
     function renderArchivedDetail(record) {
-        const container = document.getElementById(
-            "session-archive-detail"
-        );
-        const title = document.getElementById(
-            "session-archive-title"
-        );
-        const subtitle = document.getElementById(
-            "session-archive-subtitle"
-        );
+        const container = document.getElementById("session-archive-detail");
+        const title = document.getElementById("session-archive-title");
+        const subtitle = document.getElementById("session-archive-subtitle");
 
         if (!container || !title || !subtitle) {
             return;
@@ -1915,104 +2007,80 @@ if (!adminAuthenticated) {
         container.replaceChildren();
 
         if (!record) {
-            title.textContent =
-                "Select a past session";
-            subtitle.textContent =
-                "Ended live-support sessions appear on the left.";
+            title.textContent = "Select a session";
+            subtitle.textContent = "Waiting, active, and ended live-support sessions appear on the left.";
 
             const empty = document.createElement("div");
             empty.className = "admin-empty-state";
-            empty.textContent =
-                "No archived session selected.";
-
+            empty.textContent = "No session selected.";
             container.appendChild(empty);
             return;
         }
 
-        title.textContent = (
-            record.contact_name ||
-            `Ticket ${record.ticket}`
+        title.textContent = visitorDisplayName(record);
+        subtitle.textContent = (
+            `${record.contact_email || "No email supplied"} · ` +
+            `${statusDisplayText(record.status)} · ` +
+            formatAdminTime(record.last_activity_at || record.ended_at || record.created_at)
         );
 
-        subtitle.textContent = (
-            `${record.contact_email || "No email"} · ` +
-            formatAdminTime(
-                record.ended_at
-            )
-        );
+        const header = document.createElement("div");
+        header.className = "admin-session-person-card";
+
+        const status = document.createElement("span");
+        status.className = `admin-session-status ${record.status || "ended"}`;
+        status.textContent = statusDisplayText(record.status);
+
+        const email = document.createElement("strong");
+        email.textContent = record.contact_email || "No email supplied";
+
+        const issue = document.createElement("p");
+        issue.textContent = record.issue || "No issue description.";
+
+        header.appendChild(status);
+        header.appendChild(email);
+        header.appendChild(issue);
 
         const summary = document.createElement("div");
         summary.className = "admin-session-summary";
-        summary.textContent = (
-            record.summary ||
-            "No summary available."
-        );
-
-        const issue = document.createElement("div");
-        issue.className = "admin-session-issue";
-
-        const issueTitle = document.createElement("strong");
-        issueTitle.textContent = "Issue";
-
-        const issueText = document.createElement("p");
-        issueText.textContent = (
-            record.issue ||
-            "No issue description."
-        );
-
-        issue.appendChild(issueTitle);
-        issue.appendChild(issueText);
+        summary.textContent = record.summary || "No summary available.";
 
         const transcript = document.createElement("div");
         transcript.className = "admin-session-transcript";
 
-        (record.messages || []).forEach(
-            (message) => {
-                const row = document.createElement("div");
-                row.className = (
-                    `admin-live-message ${
-                        message.role || "assistant"
-                    }`
-                );
+        (record.messages || []).forEach((message) => {
+            const row = document.createElement("div");
+            row.className = (
+                `admin-live-message ${message.role || "assistant"}`
+            );
 
-                if (message.source === "context") {
-                    row.classList.add("context");
-                }
-
-                const text = document.createElement("div");
-                text.textContent =
-                    message.content || "";
-
-                const meta = document.createElement("span");
-                meta.className =
-                    "admin-live-message-meta";
-
-                meta.textContent = (
-                    `${
-                        message.source || "live"
-                    } · ${
-                        formatAdminTime(
-                            message.timestamp
-                        )
-                    }`
-                );
-
-                row.appendChild(text);
-                row.appendChild(meta);
-                transcript.appendChild(row);
+            if (message.source === "context") {
+                row.classList.add("context");
             }
-        );
 
+            const text = document.createElement("div");
+            text.textContent = message.content || "";
+
+            const meta = document.createElement("span");
+            meta.className = "admin-live-message-meta";
+            meta.textContent = (
+                `${liveMessageLabel(message)} · ` +
+                formatAdminTime(message.timestamp)
+            );
+
+            row.appendChild(text);
+            row.appendChild(meta);
+            transcript.appendChild(row);
+        });
+
+        container.appendChild(header);
         container.appendChild(summary);
-        container.appendChild(issue);
         container.appendChild(transcript);
     }
 
 
     function renderSessionArchive() {
-        const container = document.getElementById(
-            "session-archive-list"
-        );
+        const container = document.getElementById("session-archive-list");
 
         if (!container) {
             return;
@@ -2020,71 +2088,70 @@ if (!adminAuthenticated) {
 
         container.replaceChildren();
 
-        archivedSessions.forEach(
-            (record) => {
-                const button =
-                    document.createElement(
-                        "button"
-                    );
+        archivedSessions.forEach((record) => {
+            const button = document.createElement("button");
+            button.className = "admin-ticket-button admin-person-ticket";
+            button.type = "button";
 
-                button.className =
-                    "admin-ticket-button";
-                button.type = "button";
-
-                if (
-                    record.session_id ===
-                    selectedArchivedSessionId
-                ) {
-                    button.classList.add(
-                        "is-selected"
-                    );
-                }
-
-                const copy = document.createElement("div");
-                const strong = document.createElement("strong");
-                strong.textContent = (
-                    record.contact_name ||
-                    `Ticket ${record.ticket}`
-                );
-
-                const small = document.createElement("span");
-                small.textContent = (
-                    `${record.issue || "No issue summary"} · ` +
-                    formatAdminTime(
-                        record.ended_at
-                    )
-                );
-
-                copy.appendChild(strong);
-                copy.appendChild(small);
-                button.appendChild(copy);
-
-                button.addEventListener(
-                    "click",
-                    () => {
-                        selectedArchivedSessionId =
-                            record.session_id;
-
-                        renderSessionArchive();
-                        renderArchivedDetail(record);
-                    }
-                );
-
-                container.appendChild(button);
+            if (record.session_id === selectedArchivedSessionId) {
+                button.classList.add("is-selected");
             }
-        );
+
+            const copy = document.createElement("div");
+            copy.className = "admin-ticket-person-copy";
+
+            const top = document.createElement("div");
+            top.className = "admin-archive-ticket-top";
+
+            const strong = document.createElement("strong");
+            strong.textContent = visitorDisplayName(record);
+
+            const status = document.createElement("span");
+            status.className = `admin-session-status ${record.status || "ended"}`;
+            status.textContent = statusDisplayText(record.status);
+
+            top.appendChild(strong);
+            top.appendChild(status);
+            copy.appendChild(top);
+
+            appendTicketInfoLine(
+                copy,
+                "admin-ticket-email",
+                record.contact_email || "No email supplied"
+            );
+            appendTicketInfoLine(
+                copy,
+                "admin-ticket-issue",
+                record.issue || "No issue summary"
+            );
+            appendTicketInfoLine(
+                copy,
+                "admin-ticket-meta",
+                `${(record.messages || []).length} messages · ${formatAdminTime(record.last_activity_at || record.ended_at || record.created_at)}`
+            );
+
+            button.appendChild(copy);
+
+            button.addEventListener(
+                "click",
+                () => {
+                    selectedArchivedSessionId = record.session_id;
+                    renderSessionArchive();
+                    renderArchivedDetail(record);
+                }
+            );
+
+            container.appendChild(button);
+        });
 
         if (!archivedSessions.length) {
             const empty = document.createElement("div");
             empty.className = "admin-empty-state";
-            empty.textContent =
-                "No ended live-support sessions yet.";
+            empty.textContent = "No live-support sessions recorded yet.";
             container.appendChild(empty);
         }
 
-        renderArchivedDetail(
-            selectedArchivedSession() || null
-        );
+        renderArchivedDetail(selectedArchivedSession() || null);
     }
 
 

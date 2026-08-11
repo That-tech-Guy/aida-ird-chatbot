@@ -227,6 +227,52 @@ a {
     outline: none;
 }
 
+.admin-password-field {
+    position: relative;
+}
+
+.admin-password-field #admin-password {
+    padding-right: 48px;
+}
+
+.admin-password-toggle {
+    position: absolute;
+    top: 50%;
+    right: 7px;
+    display: grid;
+    width: 34px;
+    height: 34px;
+    padding: 0;
+    color: var(--green-700);
+    background: transparent;
+    border: 0;
+    border-radius: 8px;
+    cursor: pointer;
+    place-items: center;
+    transform: translateY(-50%);
+}
+
+.admin-password-toggle:hover {
+    background: rgba(8, 122, 76, 0.08);
+}
+
+.admin-password-toggle:focus-visible {
+    outline: 2px solid var(--green-700);
+    outline-offset: 1px;
+}
+
+.admin-password-toggle .password-eye-hide {
+    display: none;
+}
+
+.admin-password-toggle.is-visible .password-eye-show {
+    display: none;
+}
+
+.admin-password-toggle.is-visible .password-eye-hide {
+    display: inline;
+}
+
 .admin-login-form input:focus,
 .admin-live-message-form input:focus {
     border-color: var(--green-700);
@@ -681,15 +727,26 @@ a {
 }
 
 .admin-live-message.user {
-    margin-left: auto;
+    margin-right: auto;
+    margin-left: 0;
+    color: #4b392d;
     background: #fff3e7;
     border-color: #f4d2ad;
 }
 
 .admin-live-message.admin {
+    margin-right: 0;
+    margin-left: auto;
     color: #fff;
     background: var(--green-700);
     border-color: var(--green-700);
+}
+
+.admin-live-message.system {
+    margin-right: auto;
+    margin-left: auto;
+    color: #61736a;
+    background: #eef4f1;
 }
 
 .admin-live-message.context {
@@ -837,6 +894,108 @@ a {
 .admin-live-context p {
     margin: 3px 0 0;
 
+    line-height: 1.45;
+}
+
+.admin-live-contact-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 10px;
+}
+
+.admin-live-contact-item {
+    min-width: 0;
+    padding: 9px 10px;
+    background: rgba(255, 255, 255, 0.75);
+    border: 1px solid #d9ebe1;
+    border-radius: 9px;
+}
+
+.admin-live-contact-item small {
+    margin: 0 0 3px;
+}
+
+.admin-live-contact-item strong,
+.admin-live-contact-item p {
+    overflow-wrap: anywhere;
+}
+
+.admin-live-contact-item p {
+    margin: 0;
+}
+
+.admin-ticket-person-copy {
+    min-width: 0;
+}
+
+.admin-person-ticket {
+    align-items: start;
+}
+
+.admin-ticket-email {
+    color: #356653 !important;
+    font-weight: 700;
+    overflow-wrap: anywhere;
+}
+
+.admin-ticket-issue {
+    display: -webkit-box !important;
+    overflow: hidden;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 2;
+    line-height: 1.35;
+}
+
+.admin-ticket-meta {
+    opacity: 0.85;
+}
+
+.admin-archive-ticket-top {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+}
+
+.admin-session-status {
+    display: inline-flex !important;
+    width: fit-content;
+    margin: 0 !important;
+    padding: 3px 7px;
+    border-radius: 999px;
+    font-size: 0.57rem !important;
+    font-weight: 850;
+    letter-spacing: 0.035em;
+    text-transform: uppercase;
+}
+
+.admin-session-status.active {
+    color: #05643d;
+    background: #dff5e8;
+}
+
+.admin-session-status.queued {
+    color: #96530a;
+    background: #fff0db;
+}
+
+.admin-session-status.ended {
+    color: #64736b;
+    background: #edf2ef;
+}
+
+.admin-session-person-card {
+    display: grid;
+    margin-bottom: 12px;
+    padding: 12px;
+    gap: 7px;
+    background: #fbfdfc;
+    border: 1px solid #dce8e1;
+    border-radius: 11px;
+}
+
+.admin-session-person-card p {
+    margin: 0;
     line-height: 1.45;
 }
 
@@ -1041,3 +1200,23 @@ a {
     }
 }
 
+
+
+/* V7.4.8 — visitor left / IRD staff right in both live and archive views */
+.admin-session-transcript .admin-live-message.user {
+    justify-self: start;
+}
+
+.admin-session-transcript .admin-live-message.admin {
+    justify-self: end;
+}
+
+.admin-session-transcript .admin-live-message.system {
+    justify-self: center;
+}
+
+@media (max-width: 700px) {
+    .admin-live-contact-grid {
+        grid-template-columns: 1fr;
+    }
+}

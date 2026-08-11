@@ -552,11 +552,38 @@ def _session_position(
         return 0
 
 
+def _last_live_activity(record: dict[str, Any]) -> str:
+    """Return the latest known activity timestamp for a live-support record."""
+
+    messages = record.get("messages", [])
+
+    if isinstance(messages, list):
+        for item in reversed(messages):
+            if not isinstance(item, dict):
+                continue
+
+            timestamp = _safe_text(
+                item.get("timestamp"),
+                80,
+            )
+
+            if timestamp:
+                return timestamp
+
+    return (
+        _safe_text(record.get("ended_at"), 80)
+        or _safe_text(record.get("accepted_at"), 80)
+        or _safe_text(record.get("created_at"), 80)
+    )
+
+
 def _summarise_live_session(record: dict[str, Any]) -> str:
     """Build a local summary without sending staff chat content to Gemini."""
 
     name = _safe_text(record.get("contact_name"), 100)
+    email = _safe_text(record.get("contact_email"), 200)
     issue = _safe_text(record.get("issue"), 500)
+    status = _safe_text(record.get("status"), 40) or "queued"
     messages = record.get("messages", [])
 
     user_messages = [
@@ -574,8 +601,12 @@ def _summarise_live_session(record: dict[str, Any]) -> str:
     pieces = []
     if name:
         pieces.append(f"Visitor: {name}.")
+    if email:
+        pieces.append(f"Email: {email}.")
     if issue:
         pieces.append(f"Requested help with: {issue}.")
+
+    pieces.append(f"Current session status: {status}.")
 
     pieces.append(
         f"Live conversation contained {len(user_messages)} visitor message(s) "
@@ -712,6 +743,16 @@ def request_live_chat():
         "queued",
         "active",
     }:
+        # Refresh the staff-facing handoff details as well. This repairs
+        # older/partial live records that were created before the full
+        # name/email/issue intake completed.
+        existing["contact_name"] = contact_name
+        existing["contact_email"] = contact_email
+        existing["issue"] = issue
+        existing["language"] = language
+        existing["summary"] = _summarise_live_session(existing)
+        _save_queue(data)
+
         return jsonify(
             {
                 "status": existing.get("status"),
@@ -720,6 +761,9 @@ def request_live_chat():
                     data,
                     session_id,
                 ),
+                "contact_name": contact_name,
+                "contact_email": contact_email,
+                "issue": issue,
             }
         )
 
@@ -762,6 +806,12 @@ def request_live_chat():
         "summary": "",
         "messages": messages,
     }
+
+    data["sessions"][session_id]["summary"] = (
+        _summarise_live_session(
+            data["sessions"][session_id]
+        )
+    )
 
     if session_id not in data["queue"]:
         data["queue"].append(session_id)
@@ -862,6 +912,7 @@ def live_chat_user_message():
             content,
         )
     )
+    record["summary"] = _summarise_live_session(record)
 
     _save_queue(data)
 
@@ -872,10 +923,12 @@ def live_chat_user_message():
 
 @admin_bp.post("/api/live-chat/end")
 def live_chat_user_end():
+    """End a visitor live-support record once and preserve it in archive."""
+
     payload = request.get_json(silent=True)
 
     if not isinstance(payload, dict):
-        return jsonify({"ended": True})
+        return jsonify({"ended": True, "archived": True})
 
     session_id = _safe_text(
         payload.get("session_id"),
@@ -884,26 +937,35 @@ def live_chat_user_end():
 
     data = _load_queue()
     record = data["sessions"].get(session_id)
+    changed = False
 
     if isinstance(record, dict):
-        _finalise_live_record(
-            record,
-            "visitor_ended_live_support",
-        )
+        if record.get("status") in {"queued", "active"}:
+            _finalise_live_record(
+                record,
+                "visitor_ended_live_support",
+            )
+            record.setdefault("messages", []).append(
+                _queue_message(
+                    "system",
+                    "The visitor ended the live chat session.",
+                )
+            )
+            record["summary"] = _summarise_live_session(record)
+            changed = True
 
         if session_id in data["queue"]:
             data["queue"].remove(session_id)
+            changed = True
 
-        record.setdefault("messages", []).append(
-            _queue_message(
-                "system",
-                "The visitor ended the live chat session.",
-            )
-        )
+        if changed:
+            _save_queue(data)
 
-        _save_queue(data)
-
-    return jsonify({"ended": True})
+    return jsonify({
+        "ended": True,
+        "removed_from_active": True,
+        "archived": True,
+    })
 
 
 # ------------------------------------------------------------------
@@ -1552,19 +1614,28 @@ def admin_download_surveys():
 @admin_bp.get("/api/admin/sessions")
 @admin_required()
 def admin_session_archive():
+    """Return the persisted live-support record for current and past chats."""
+
     data = _load_queue()
-    archived = []
+    sessions = []
 
     for session_id, record in data.get("sessions", {}).items():
-        if not isinstance(record, dict) or record.get("status") != "ended":
+        if not isinstance(record, dict):
             continue
 
-        summary = record.get("summary", "") or _summarise_live_session(record)
+        status = _safe_text(
+            record.get("status"),
+            40,
+        ) or "ended"
 
-        archived.append(
+        summary = _summarise_live_session(record)
+
+        sessions.append(
             {
                 "session_id": session_id,
                 "ticket": session_id[:8],
+                "status": status,
+                "is_current": status in {"queued", "active"},
                 "contact_name": record.get("contact_name", ""),
                 "contact_email": record.get("contact_email", ""),
                 "issue": record.get("issue", ""),
@@ -1572,20 +1643,48 @@ def admin_session_archive():
                 "created_at": record.get("created_at", ""),
                 "accepted_at": record.get("accepted_at", ""),
                 "ended_at": record.get("ended_at", ""),
+                "last_activity_at": _last_live_activity(record),
                 "end_reason": record.get("end_reason", ""),
                 "summary": summary,
                 "messages": record.get("messages", []),
             }
         )
 
-    archived.sort(
-        key=lambda item: item.get("ended_at", "") or item.get("created_at", ""),
-        reverse=True,
+    status_priority = {
+        "active": 0,
+        "queued": 1,
+        "ended": 2,
+    }
+
+    sessions.sort(
+        key=lambda item: (
+            status_priority.get(item.get("status", "ended"), 9),
+            item.get("last_activity_at", ""),
+        )
     )
+
+    # Keep current sessions grouped first, newest activity first inside
+    # each group, followed by the most recently ended sessions.
+    grouped = []
+    for wanted_status in ("active", "queued", "ended"):
+        group = [
+            item for item in sessions
+            if item.get("status") == wanted_status
+        ]
+        group.sort(
+            key=lambda item: item.get("last_activity_at", ""),
+            reverse=True,
+        )
+        grouped.extend(group)
 
     return jsonify(
         {
-            "sessions": archived[:200],
+            "sessions": grouped[:300],
+            "counts": {
+                "active": sum(1 for item in grouped if item.get("status") == "active"),
+                "queued": sum(1 for item in grouped if item.get("status") == "queued"),
+                "ended": sum(1 for item in grouped if item.get("status") == "ended"),
+            },
             "persistence": "supabase" if supabase_configured() else "local",
         }
     )
@@ -1858,6 +1957,9 @@ def admin_live_chat_overview():
                 "contact_name": record.get("contact_name", ""),
                 "contact_email": record.get("contact_email", ""),
                 "issue": record.get("issue", ""),
+                "language": record.get("language", "en"),
+                "status": "queued",
+                "last_activity_at": _last_live_activity(record),
             }
         )
 
@@ -1882,6 +1984,9 @@ def admin_live_chat_overview():
                 "contact_name": record.get("contact_name", ""),
                 "contact_email": record.get("contact_email", ""),
                 "issue": record.get("issue", ""),
+                "language": record.get("language", "en"),
+                "status": "active",
+                "last_activity_at": _last_live_activity(record),
             }
         )
 
@@ -1929,6 +2034,7 @@ def admin_accept_live_chat():
             ),
         )
     )
+    record["summary"] = _summarise_live_session(record)
 
     _save_queue(data)
 
@@ -1972,6 +2078,7 @@ def admin_send_live_chat_message():
             message,
         )
     )
+    record["summary"] = _summarise_live_session(record)
     _save_queue(data)
 
     return jsonify({"sent": True})
@@ -1994,23 +2101,34 @@ def admin_end_live_chat():
             {"error": "Ticket was not found."}
         ), 404
 
+    changed = False
+
     if session_id in data["queue"]:
         data["queue"].remove(session_id)
+        changed = True
 
-    _finalise_live_record(
-        record,
-        "staff_ended_live_support",
-    )
-    record.setdefault("messages", []).append(
-        _queue_message(
-            "admin",
-            (
-                "The IRD staff representative has ended the live chat. "
-                "You are now reconnected with A.I.D.A."
-            ),
+    if record.get("status") in {"queued", "active"}:
+        _finalise_live_record(
+            record,
+            "staff_ended_live_support",
         )
-    )
+        record.setdefault("messages", []).append(
+            _queue_message(
+                "admin",
+                (
+                    "The IRD staff representative has ended the live chat. "
+                    "You are now reconnected with A.I.D.A."
+                ),
+            )
+        )
+        record["summary"] = _summarise_live_session(record)
+        changed = True
 
-    _save_queue(data)
+    if changed:
+        _save_queue(data)
 
-    return jsonify({"ended": True})
+    return jsonify({
+        "ended": True,
+        "removed_from_active": True,
+        "archived": True,
+    })

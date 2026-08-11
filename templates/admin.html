@@ -65,14 +65,29 @@
 
                 <form id="admin-login-form" class="admin-login-form">
                     <label for="admin-password">Staff password</label>
-                    <input
-                        id="admin-password"
-                        name="password"
-                        type="password"
-                        autocomplete="current-password"
-                        required
-                        {% if not admin_configured %}disabled{% endif %}
-                    >
+                    <div class="admin-password-field">
+                        <input
+                            id="admin-password"
+                            name="password"
+                            type="password"
+                            autocomplete="current-password"
+                            required
+                            {% if not admin_configured %}disabled{% endif %}
+                        >
+
+                        <button
+                            id="admin-password-toggle"
+                            class="admin-password-toggle"
+                            type="button"
+                            aria-label="Show password"
+                            aria-pressed="false"
+                            title="Show password"
+                            {% if not admin_configured %}disabled{% endif %}
+                        >
+                            <span class="password-eye-show" aria-hidden="true">👁</span>
+                            <span class="password-eye-hide" aria-hidden="true">🙈</span>
+                        </button>
+                    </div>
 
                     <button
                         type="submit"
@@ -392,14 +407,14 @@
                 <section class="admin-panel" data-admin-panel="sessions">
                     <div class="admin-panel-heading">
                         <div>
-                            <span class="admin-section-kicker">Previous live handoffs</span>
+                            <span class="admin-section-kicker">Current & past live handoffs</span>
                             <h2>Session Archive</h2>
                         </div>
                         <button class="admin-secondary-button" id="refresh-sessions-button" type="button">Refresh</button>
                     </div>
 
                     <div class="admin-alert admin-alert-info">
-                        Session summaries are generated locally from the staff-handoff record. The archive is not sent back to Gemini for summarisation.
+                        Waiting, active, and ended IRD live-support conversations are stored here. Session summaries are generated locally and are not sent back to Gemini for summarisation.
                     </div>
 
                     <div class="admin-session-layout">
@@ -409,8 +424,8 @@
 
                         <article class="admin-card">
                             <div class="admin-card-heading">
-                                <h3 id="session-archive-title">Select a past session</h3>
-                                <span id="session-archive-subtitle">Ended live-support sessions appear on the left.</span>
+                                <h3 id="session-archive-title">Select a session</h3>
+                                <span id="session-archive-subtitle">Waiting, active, and ended sessions appear on the left.</span>
                             </div>
                             <div id="session-archive-detail" class="admin-session-detail">
                                 <div class="admin-empty-state">No archived session selected.</div>
