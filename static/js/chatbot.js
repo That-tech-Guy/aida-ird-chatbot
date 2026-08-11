@@ -374,26 +374,814 @@ const LANGUAGE_OPTIONS = {
             "**¿Cómo puedo ayudarle hoy?**"
     },
 
-    fr: {
-        name: "Français",
-        speechRecognition: "fr-FR",
-        termsHeading: "Conditions d’utilisation",
+    zh: {
+        name: "中文",
+        speechRecognition: "zh-CN",
+        termsHeading: "使用条款",
         terms: [
-            "A.I.D.A. fournit des informations générales du Département des recettes intérieures et ne remplace pas l’assistance officielle ou propre à un compte.",
-            "Ne saisissez pas de mots de passe, de coordonnées bancaires ou de carte, de codes de sécurité, de codes d’authentification ni d’informations fiscales privées.",
-            "Les échéances importantes, les montants, les questions de conformité et les informations propres à un compte doivent être vérifiés auprès du Département des recettes intérieures."
+            "A.I.D.A. 仅提供安圭拉税务局的一般信息，不能替代官方意见或针对个人账户的协助。",
+            "请勿输入密码、银行或银行卡资料、安全验证码、身份验证代码或私人纳税人信息。",
+            "重要截止日期、金额、合规事项以及账户相关信息，请向安圭拉税务局核实。"
         ],
-        agreement: "J’accepte les Conditions d’utilisation.",
-        continueLabel: "Continuer",
+        agreement: "我同意使用条款。",
+        continueLabel: "继续",
         privacy:
-            "Veuillez ne pas saisir de mots de passe, de données de carte, d’informations bancaires ni de codes de sécurité.",
-        placeholder: "Saisissez votre question ici...",
+            "请勿输入密码、银行卡资料、银行信息或安全验证码。",
+        placeholder: "请在这里输入您的问题...",
         greeting:
-            "Bonjour ! 👋 Je suis **A.I.D.A.**, votre assistante du Département des recettes intérieures d’Anguilla. " +
-            "Je peux vous aider avec les informations fiscales, les licences, les paiements et les formulaires.\n\n" +
-            "**Comment puis-je vous aider aujourd’hui ?**"
+            "您好！👋 我是 **A.I.D.A.**，安圭拉税务局智能助理。 " +
+            "我可以协助您了解税务、执照、付款和表格等一般信息。\n\n" +
+            "**今天有什么可以帮您？**"
     }
 };
+
+
+const UI_COPY = {
+    en: {
+        help: {
+            button: "Help",
+            hide: "Hide",
+            showTitle: "Show quick actions",
+            hideTitle: "Hide quick actions",
+            quickActions: "Quick Actions",
+            chooseService: "Choose a service",
+            popularQuestions: "Popular Questions",
+            frequentlyRequested: "Frequently requested help"
+        },
+        composer: {
+            microphoneTitle: "Speak your question",
+            microphoneAria: "Speak your question",
+            sendAria: "Send message",
+            endChat: "End chat",
+            minimise: "Minimise",
+            expand: "Expand chatbot",
+            contract: "Return to normal size"
+        },
+        quickActions: {
+            "File GST Return": "File GST Return",
+            "Vehicle Licence": "Vehicle Licence",
+            "Liquor Licence": "Liquor Licence",
+            "Register a Business": "Register a Business",
+            "Download Forms": "Download Forms",
+            "Pay Taxes": "Pay Taxes",
+            "Voice Mode": "Voice Mode",
+            "Chat with IRD": "Chat with IRD",
+            endVoiceMode: "End Voice Mode"
+        },
+        quickActionQuestions: {
+            "File GST Return":
+                "How do I file a General Services Tax return?",
+            "Vehicle Licence":
+                "How do I license or renew a vehicle?",
+            "Liquor Licence":
+                "How do I apply for or renew a liquor licence?",
+            "Register a Business":
+                "How do I register a business and obtain a business licence?",
+            "Pay Taxes":
+                "What payment methods can I use to pay taxes or fees?"
+        },
+        popularQuestions: [
+            "How do I pay Property Tax?",
+            "What is General Services Tax?",
+            "How do I renew my vehicle licence?",
+            "What are the business registration requirements?",
+            "What are the IRD office hours and contact details?"
+        ],
+        englishOnly: {
+            short: "English only",
+            forms:
+                "**English-only service notice:** IRD forms and their official file titles are currently available in English only. You can continue to the forms catalogue, but the forms themselves will remain in English.",
+            liveChat:
+                "**English-only service notice:** Live chat with IRD staff is currently available in English only. You can continue to the queue, but the staff conversation will be in English."
+        },
+        timeout: {
+            assistant:
+                "**Are you still there?**\n" +
+                "I haven’t seen any activity for a little while. " +
+                "This chat will close in **3 minutes** unless you continue.",
+            title: "Still with me?",
+            lineBefore: "This chat will disconnect in",
+            lineAfter: "without activity.",
+            stillHere: "I’m still here"
+        },
+        speech: {
+            listen: "Listen",
+            listenTitle: "Listen to this response",
+            playAria: "Play A.I.D.A. response",
+            pause: "Pause",
+            resume: "Resume",
+            connecting: "Connecting",
+            fallback: "Fallback",
+            startedIn: "Started in"
+        },
+        typing: {
+            aria: "A.I.D.A. is typing",
+            label: "A.I.D.A. is typing..."
+        },
+        voice: {
+            title: "Gemini Live Voice Mode",
+            privacyLine:
+                "Direct Gemini connection · do not share sensitive information",
+            end: "End",
+            ended:
+                "Voice Mode ended. You can continue with normal A.I.D.A. chat, the one-time microphone, forms, or IRD live support.",
+            consentTitle: "Gemini Live Voice Mode",
+            consentDirect:
+                "For faster real-time conversation, Voice Mode connects your live microphone audio directly to Google Gemini.",
+            consentSensitive:
+                "Do not say sensitive information, including passwords, card or banking details, security/authentication codes, taxpayer identifiers, private account numbers, or other confidential personal information.",
+            consentTranscript:
+                "A.I.D.A. will transcribe both sides of the live conversation into this chat as you speak.",
+            start: "Start Voice Mode",
+            cancel: "Cancel",
+            unavailableStaff:
+                "Voice Mode is unavailable while you are connected to IRD staff live support.",
+            microphoneNeeded:
+                "Voice Mode needs microphone access. Please use a current browser and allow microphone permission.",
+            statuses: {
+                "Connecting…": "Connecting…",
+                "Creating short-lived Gemini connection…":
+                    "Creating short-lived Gemini connection…",
+                "Secure token ready — opening Gemini Live…":
+                    "Secure token ready — opening Gemini Live…",
+                "Connected — configuring A.I.D.A.…":
+                    "Connected — configuring A.I.D.A.…",
+                "Connected — starting microphone…":
+                    "Connected — starting microphone…",
+                "Listening… speak naturally.":
+                    "Listening… speak naturally.",
+                "A.I.D.A. is speaking…":
+                    "A.I.D.A. is speaking…",
+                "Listening…":
+                    "Listening…",
+                "Gemini Live connection error.":
+                    "Gemini Live connection error.",
+                "Gemini Live setup failed.":
+                    "Gemini Live setup failed."
+            }
+        }
+    },
+
+    es: {
+        help: {
+            button: "Ayuda",
+            hide: "Ocultar",
+            showTitle: "Mostrar acciones rápidas",
+            hideTitle: "Ocultar acciones rápidas",
+            quickActions: "Acciones rápidas",
+            chooseService: "Elija un servicio",
+            popularQuestions: "Preguntas frecuentes",
+            frequentlyRequested: "Ayuda solicitada con frecuencia"
+        },
+        composer: {
+            microphoneTitle: "Diga su pregunta",
+            microphoneAria: "Diga su pregunta",
+            sendAria: "Enviar mensaje",
+            endChat: "Finalizar chat",
+            minimise: "Minimizar",
+            expand: "Ampliar el chat",
+            contract: "Volver al tamaño normal"
+        },
+        quickActions: {
+            "File GST Return": "Presentar declaración de GST",
+            "Vehicle Licence": "Licencia de vehículo",
+            "Liquor Licence": "Licencia de licores",
+            "Register a Business": "Registrar un negocio",
+            "Download Forms": "Descargar formularios",
+            "Pay Taxes": "Pagar impuestos",
+            "Voice Mode": "Modo de voz",
+            "Chat with IRD": "Chatear con IRD",
+            endVoiceMode: "Finalizar modo de voz"
+        },
+        quickActionQuestions: {
+            "File GST Return":
+                "¿Cómo presento una declaración del Impuesto General sobre Servicios (GST)?",
+            "Vehicle Licence":
+                "¿Cómo obtengo o renuevo una licencia de vehículo?",
+            "Liquor Licence":
+                "¿Cómo solicito o renuevo una licencia de licores?",
+            "Register a Business":
+                "¿Cómo registro un negocio y obtengo una licencia comercial?",
+            "Pay Taxes":
+                "¿Qué métodos de pago puedo usar para pagar impuestos o tasas?"
+        },
+        popularQuestions: [
+            "¿Cómo pago el Impuesto sobre la Propiedad?",
+            "¿Qué es el Impuesto General sobre Servicios?",
+            "¿Cómo renuevo mi licencia de vehículo?",
+            "¿Cuáles son los requisitos para registrar un negocio?",
+            "¿Cuál es el horario y la información de contacto de IRD?"
+        ],
+        englishOnly: {
+            short: "Solo en inglés",
+            forms:
+                "**Aviso: servicio solo en inglés:** Los formularios de IRD y los nombres oficiales de los archivos están disponibles actualmente solo en inglés. Puede continuar al catálogo, pero los formularios permanecerán en inglés.",
+            liveChat:
+                "**Aviso: servicio solo en inglés:** El chat en vivo con el personal de IRD está disponible actualmente solo en inglés. Puede entrar en la cola, pero la conversación con el agente será en inglés."
+        },
+        timeout: {
+            assistant:
+                "**¿Sigue ahí?**\n" +
+                "No he detectado actividad durante un rato. " +
+                "Este chat se cerrará en **3 minutos** si no continúa.",
+            title: "¿Sigue ahí?",
+            lineBefore: "Este chat se desconectará en",
+            lineAfter: "si no hay actividad.",
+            stillHere: "Sigo aquí"
+        },
+        speech: {
+            listen: "Escuchar",
+            listenTitle: "Escuchar esta respuesta",
+            playAria: "Reproducir la respuesta de A.I.D.A.",
+            pause: "Pausar",
+            resume: "Reanudar",
+            connecting: "Conectando",
+            fallback: "Alternativa",
+            startedIn: "Inició en"
+        },
+        typing: {
+            aria: "A.I.D.A. está escribiendo",
+            label: "A.I.D.A. está escribiendo..."
+        },
+        voice: {
+            title: "Modo de voz Gemini Live",
+            privacyLine:
+                "Conexión directa con Gemini · no comparta información confidencial",
+            end: "Finalizar",
+            ended:
+                "El modo de voz ha finalizado. Puede continuar con el chat normal de A.I.D.A., el micrófono de una sola pregunta, los formularios o el soporte en vivo de IRD.",
+            consentTitle: "Modo de voz Gemini Live",
+            consentDirect:
+                "Para una conversación más rápida y en tiempo real, el Modo de voz conecta el audio de su micrófono directamente con Google Gemini.",
+            consentSensitive:
+                "No diga información confidencial, como contraseñas, datos bancarios o de tarjetas, códigos de seguridad o autenticación, identificadores fiscales, números de cuenta privados u otra información personal confidencial.",
+            consentTranscript:
+                "A.I.D.A. transcribirá en este chat ambos lados de la conversación mientras hablan.",
+            start: "Iniciar modo de voz",
+            cancel: "Cancelar",
+            unavailableStaff:
+                "El Modo de voz no está disponible mientras esté conectado al soporte en vivo del personal de IRD.",
+            microphoneNeeded:
+                "El Modo de voz necesita acceso al micrófono. Use un navegador actualizado y permita el acceso al micrófono.",
+            statuses: {
+                "Connecting…": "Conectando…",
+                "Creating short-lived Gemini connection…":
+                    "Creando una conexión temporal segura con Gemini…",
+                "Secure token ready — opening Gemini Live…":
+                    "Conexión segura lista — abriendo Gemini Live…",
+                "Connected — configuring A.I.D.A.…":
+                    "Conectado — configurando A.I.D.A.…",
+                "Connected — starting microphone…":
+                    "Conectado — iniciando micrófono…",
+                "Listening… speak naturally.":
+                    "Escuchando… hable con naturalidad.",
+                "A.I.D.A. is speaking…":
+                    "A.I.D.A. está hablando…",
+                "Listening…":
+                    "Escuchando…",
+                "Gemini Live connection error.":
+                    "Error de conexión con Gemini Live.",
+                "Gemini Live setup failed.":
+                    "Falló la configuración de Gemini Live."
+            }
+        }
+    },
+
+    zh: {
+        help: {
+            button: "帮助",
+            hide: "隐藏",
+            showTitle: "显示快捷操作",
+            hideTitle: "隐藏快捷操作",
+            quickActions: "快捷操作",
+            chooseService: "选择服务",
+            popularQuestions: "常见问题",
+            frequentlyRequested: "常用帮助"
+        },
+        composer: {
+            microphoneTitle: "说出您的问题",
+            microphoneAria: "说出您的问题",
+            sendAria: "发送消息",
+            endChat: "结束聊天",
+            minimise: "最小化",
+            expand: "放大聊天窗口",
+            contract: "恢复正常大小"
+        },
+        quickActions: {
+            "File GST Return": "提交 GST 申报",
+            "Vehicle Licence": "车辆牌照",
+            "Liquor Licence": "酒类许可证",
+            "Register a Business": "注册企业",
+            "Download Forms": "下载表格",
+            "Pay Taxes": "缴纳税款",
+            "Voice Mode": "语音模式",
+            "Chat with IRD": "与 IRD 人员聊天",
+            endVoiceMode: "结束语音模式"
+        },
+        quickActionQuestions: {
+            "File GST Return":
+                "如何提交一般服务税（GST）申报？",
+            "Vehicle Licence":
+                "如何办理或续期车辆牌照？",
+            "Liquor Licence":
+                "如何申请或续期酒类许可证？",
+            "Register a Business":
+                "如何注册企业并取得商业许可证？",
+            "Pay Taxes":
+                "我可以使用哪些付款方式缴纳税款或费用？"
+        },
+        popularQuestions: [
+            "如何缴纳物业税？",
+            "什么是一般服务税（GST）？",
+            "如何续期车辆牌照？",
+            "企业注册有哪些要求？",
+            "IRD 的办公时间和联系方式是什么？"
+        ],
+        englishOnly: {
+            short: "仅英语",
+            forms:
+                "**仅英语服务提示：** IRD 表格及其官方文件名称目前仅提供英语版本。您仍可以继续查看表格目录，但表格内容将保持为英语。",
+            liveChat:
+                "**仅英语服务提示：** IRD 工作人员的实时聊天目前仅提供英语服务。您仍可以加入等候队列，但与工作人员的对话将使用英语。"
+        },
+        timeout: {
+            assistant:
+                "**您还在吗？**\n" +
+                "一段时间没有检测到活动。 " +
+                "如果您不继续操作，此聊天将在 **3 分钟**后关闭。",
+            title: "您还在吗？",
+            lineBefore: "此聊天将在",
+            lineAfter: "无活动后断开。",
+            stillHere: "我还在"
+        },
+        speech: {
+            listen: "收听",
+            listenTitle: "收听此回复",
+            playAria: "播放 A.I.D.A. 的回复",
+            pause: "暂停",
+            resume: "继续播放",
+            connecting: "正在连接",
+            fallback: "备用方式",
+            startedIn: "开始播放耗时"
+        },
+        typing: {
+            aria: "A.I.D.A. 正在输入",
+            label: "A.I.D.A. 正在输入..."
+        },
+        voice: {
+            title: "Gemini Live 语音模式",
+            privacyLine:
+                "直接连接 Gemini · 请勿分享敏感信息",
+            end: "结束",
+            ended:
+                "语音模式已结束。您可以继续使用普通 A.I.D.A. 聊天、单次麦克风输入、表格或 IRD 实时支持。",
+            consentTitle: "Gemini Live 语音模式",
+            consentDirect:
+                "为了获得更快的实时对话体验，语音模式会将您的麦克风音频直接连接到 Google Gemini。",
+            consentSensitive:
+                "请勿说出敏感信息，包括密码、银行卡或银行资料、安全或身份验证代码、纳税人识别信息、私人账户号码或其他机密个人信息。",
+            consentTranscript:
+                "A.I.D.A. 会在您说话时将双方的实时对话转写到聊天窗口中。",
+            start: "开始语音模式",
+            cancel: "取消",
+            unavailableStaff:
+                "当您已连接 IRD 工作人员实时支持时，无法使用语音模式。",
+            microphoneNeeded:
+                "语音模式需要麦克风权限。请使用较新的浏览器并允许麦克风访问。",
+            statuses: {
+                "Connecting…": "正在连接…",
+                "Creating short-lived Gemini connection…":
+                    "正在创建 Gemini 临时安全连接…",
+                "Secure token ready — opening Gemini Live…":
+                    "安全连接已准备 — 正在打开 Gemini Live…",
+                "Connected — configuring A.I.D.A.…":
+                    "已连接 — 正在配置 A.I.D.A.…",
+                "Connected — starting microphone…":
+                    "已连接 — 正在启动麦克风…",
+                "Listening… speak naturally.":
+                    "正在聆听…请自然说话。",
+                "A.I.D.A. is speaking…":
+                    "A.I.D.A. 正在说话…",
+                "Listening…":
+                    "正在聆听…",
+                "Gemini Live connection error.":
+                    "Gemini Live 连接错误。",
+                "Gemini Live setup failed.":
+                    "Gemini Live 配置失败。"
+            }
+        }
+    }
+};
+
+
+function getUiCopy() {
+    return (
+        UI_COPY[selectedLanguage] ||
+        UI_COPY.en
+    );
+}
+
+
+function localizeVoiceStatus(statusText) {
+    const ui = getUiCopy();
+
+    return (
+        ui.voice.statuses[
+            statusText
+        ] ||
+        statusText
+    );
+}
+
+
+function showEnglishOnlyServiceNotice(serviceName) {
+    if (
+        !selectedLanguage ||
+        selectedLanguage === "en"
+    ) {
+        return;
+    }
+
+    const ui = getUiCopy();
+
+    addAssistantMessage(
+        (
+            serviceName === "forms"
+                ? ui.englishOnly.forms
+                : ui.englishOnly.liveChat
+        ),
+        [],
+        {
+            countUnread: false
+        }
+    );
+}
+
+
+function applySelectedLanguageUi() {
+    const ui = getUiCopy();
+
+    const firstDrawerHeading =
+        helpDrawer.querySelector(
+            ".drawer-section:not(.popular-section) .drawer-heading"
+        );
+
+    const quickTitle =
+        firstDrawerHeading?.querySelector("strong");
+
+    const quickSubtitle =
+        firstDrawerHeading?.querySelector("span");
+
+    const popularHeading =
+        helpDrawer.querySelector(
+            ".popular-section .drawer-heading"
+        );
+
+    const popularTitle =
+        popularHeading?.querySelector("strong");
+
+    const popularSubtitle =
+        popularHeading?.querySelector("span");
+
+    if (quickTitle) {
+        quickTitle.textContent =
+            ui.help.quickActions;
+    }
+
+    if (quickSubtitle) {
+        quickSubtitle.textContent =
+            ui.help.chooseService;
+    }
+
+    if (popularTitle) {
+        popularTitle.textContent =
+            ui.help.popularQuestions;
+    }
+
+    if (popularSubtitle) {
+        popularSubtitle.textContent =
+            ui.help.frequentlyRequested;
+    }
+
+    drawerClose.setAttribute(
+        "aria-label",
+        ui.help.hideTitle
+    );
+
+    const helpLabel =
+        helpButton.querySelector("span");
+
+    const drawerIsOpen =
+        helpDrawer.classList.contains("open");
+
+    if (helpLabel) {
+        helpLabel.textContent = (
+            drawerIsOpen
+                ? ui.help.hide
+                : ui.help.button
+        );
+    }
+
+    helpButton.title = (
+        drawerIsOpen
+            ? ui.help.hideTitle
+            : ui.help.showTitle
+    );
+
+    chatInput.placeholder =
+        getSelectedLanguageOption().placeholder;
+
+    microphoneButton.setAttribute(
+        "aria-label",
+        ui.composer.microphoneAria
+    );
+
+    microphoneButton.title =
+        ui.composer.microphoneTitle;
+
+    sendButton.setAttribute(
+        "aria-label",
+        ui.composer.sendAria
+    );
+
+    endChatButton.setAttribute(
+        "aria-label",
+        ui.composer.endChat
+    );
+
+    endChatButton.title =
+        ui.composer.endChat;
+
+    minimiseButton.setAttribute(
+        "aria-label",
+        ui.composer.minimise
+    );
+
+    minimiseButton.title =
+        ui.composer.minimise;
+
+    expandButton.setAttribute(
+        "aria-label",
+        (
+            chatWidget.classList.contains("is-expanded")
+                ? ui.composer.contract
+                : ui.composer.expand
+        )
+    );
+
+    expandButton.title = (
+        chatWidget.classList.contains("is-expanded")
+            ? ui.composer.contract
+            : ui.composer.expand
+    );
+
+    buildHelpDrawer();
+}
+
+
+const SERVICE_COPY = {
+    en: {
+        forms: {
+            intro:
+                "**Forms & Guides**\n" +
+                "Choose a form below. Each form shows two options:\n" +
+                "- The official IRD PDF\n" +
+                "- The A.I.D.A. fillable PDF, when that version has been added",
+            heading: "Choose your form option",
+            headingNote:
+                "Use the official IRD PDF or the A.I.D.A. fillable copy.",
+            officialButton: "Official IRD PDF",
+            fillableButton: "A.I.D.A. Fillable PDF",
+            fillablePreparing:
+                "The fillable version is being prepared.",
+            fillableStatus:
+                "The official PDF is available now. The A.I.D.A. fillable copy will activate when its PDF is added to the project.",
+            loadError:
+                "The forms catalogue could not be loaded."
+        },
+        handoff: {
+            start:
+                "**Before I place you in the IRD support queue, what is your first name?**\n" +
+                "This handoff information goes directly to IRD staff and is not added to the Gemini conversation.",
+            cancelled:
+                "No problem — I cancelled the IRD live-support request.",
+            invalidFirst:
+                "**Please enter your first name only.**\n" +
+                "Letters, apostrophes and hyphens are accepted.",
+            askLast:
+                "**Thank you. What is your last name?**",
+            invalidLast:
+                "**Please enter your last name.**\n" +
+                "Letters, spaces, apostrophes and hyphens are accepted.",
+            askEmail:
+                "**What email address should the IRD representative use if follow-up is needed?**",
+            invalidEmail:
+                "**That email address does not look valid.**\n" +
+                "Please enter it again, for example: `name@example.com`, or type **cancel**.",
+            askIssue:
+                "**Briefly describe the issue you want the IRD representative to help with.**\n" +
+                "Please do not include passwords, card details, security codes, authentication codes or private taxpayer identifiers.",
+            issueTooShort:
+                "**Please give the IRD representative a little more detail about the issue.**",
+            joining:
+                "**Thank you. I’m placing you in the IRD support queue now.**",
+            cancelCommands: [
+                "cancel",
+                "cancel live chat",
+                "cancel live support",
+                "nevermind",
+                "never mind"
+            ]
+        },
+        liveSupport: {
+            waiting: "Waiting for IRD staff",
+            ticket: "Ticket",
+            queuePosition: "Queue position",
+            leaveQueue: "Leave queue",
+            connected: "Connected to IRD staff",
+            directMessage:
+                "Messages now go directly to the staff representative.",
+            end: "End live chat",
+            joinedActive:
+                "You’re connected to **IRD staff**. Your next messages will go directly to the representative.",
+            joinedQueue:
+                "You’ve joined the **IRD live-support queue**. An administrator can accept your ticket from the staff dashboard. You can type a message while you wait.",
+            unavailable:
+                "IRD live support is unavailable right now.",
+            sendFailed:
+                "Your live-chat message could not be sent.",
+            ended:
+                "**Live chat ended.**\n" +
+                "You’re back with A.I.D.A. and can continue asking questions here.",
+            noActive:
+                "There is no active IRD live-support session to end."
+        }
+    },
+
+    es: {
+        forms: {
+            intro:
+                "**Formularios y guías**\n" +
+                "Elija un formulario a continuación. Cada formulario muestra dos opciones:\n" +
+                "- El PDF oficial de IRD (en inglés)\n" +
+                "- La copia rellenable de A.I.D.A. (en inglés), cuando esté disponible",
+            heading: "Elija una opción de formulario",
+            headingNote:
+                "Los documentos oficiales permanecen en inglés.",
+            officialButton: "PDF oficial de IRD · Inglés",
+            fillableButton: "PDF rellenable de A.I.D.A. · Inglés",
+            fillablePreparing:
+                "La versión rellenable se está preparando.",
+            fillableStatus:
+                "El PDF oficial ya está disponible. La copia rellenable de A.I.D.A. se activará cuando el archivo PDF se añada al proyecto.",
+            loadError:
+                "No se pudo cargar el catálogo de formularios."
+        },
+        handoff: {
+            start:
+                "**Antes de colocarlo en la cola de soporte de IRD, ¿cuál es su nombre?**\n" +
+                "Estos datos se envían directamente al personal de IRD y no se añaden a la conversación de Gemini. El servicio del agente es actualmente solo en inglés.",
+            cancelled:
+                "De acuerdo — cancelé la solicitud de soporte en vivo de IRD.",
+            invalidFirst:
+                "**Introduzca solamente su nombre.**\n" +
+                "Se aceptan letras, apóstrofes y guiones.",
+            askLast:
+                "**Gracias. ¿Cuál es su apellido?**",
+            invalidLast:
+                "**Introduzca su apellido.**\n" +
+                "Se aceptan letras, espacios, apóstrofes y guiones.",
+            askEmail:
+                "**¿Qué dirección de correo electrónico debe usar el representante de IRD si necesita darle seguimiento?**",
+            invalidEmail:
+                "**Esa dirección de correo electrónico no parece válida.**\n" +
+                "Inténtelo de nuevo, por ejemplo: `nombre@ejemplo.com`, o escriba **cancelar**.",
+            askIssue:
+                "**Describa brevemente el problema con el que necesita ayuda del representante de IRD.**\n" +
+                "No incluya contraseñas, datos de tarjetas, códigos de seguridad o autenticación ni identificadores fiscales privados.",
+            issueTooShort:
+                "**Proporcione un poco más de información sobre el problema para el representante de IRD.**",
+            joining:
+                "**Gracias. Lo estoy colocando ahora en la cola de soporte de IRD.**",
+            cancelCommands: [
+                "cancelar",
+                "cancelar chat",
+                "cancelar soporte",
+                "cancel",
+                "cancel live chat"
+            ]
+        },
+        liveSupport: {
+            waiting: "Esperando al personal de IRD",
+            ticket: "Ticket",
+            queuePosition: "Posición en la cola",
+            leaveQueue: "Salir de la cola",
+            connected: "Conectado con el personal de IRD",
+            directMessage:
+                "Los mensajes ahora se envían directamente al representante.",
+            end: "Finalizar chat",
+            joinedActive:
+                "Está conectado con el **personal de IRD**. Sus próximos mensajes se enviarán directamente al representante. El servicio del agente es en inglés.",
+            joinedQueue:
+                "Se ha unido a la **cola de soporte en vivo de IRD**. Un administrador puede aceptar su ticket. Puede escribir un mensaje mientras espera. El servicio del agente es en inglés.",
+            unavailable:
+                "El soporte en vivo de IRD no está disponible en este momento.",
+            sendFailed:
+                "No se pudo enviar su mensaje de chat en vivo.",
+            ended:
+                "**El chat en vivo ha terminado.**\n" +
+                "Ha vuelto con A.I.D.A. y puede continuar haciendo preguntas aquí.",
+            noActive:
+                "No hay una sesión activa de soporte en vivo de IRD para finalizar."
+        }
+    },
+
+    zh: {
+        forms: {
+            intro:
+                "**表格与指南**\n" +
+                "请选择下面的表格。每个表格提供两个选项：\n" +
+                "- IRD 官方 PDF（英语）\n" +
+                "- A.I.D.A. 可填写 PDF（英语），如该版本已添加",
+            heading: "选择表格选项",
+            headingNote:
+                "官方文件目前仍为英语版本。",
+            officialButton: "IRD 官方 PDF · 英语",
+            fillableButton: "A.I.D.A. 可填写 PDF · 英语",
+            fillablePreparing:
+                "可填写版本正在准备中。",
+            fillableStatus:
+                "官方 PDF 现已可用。A.I.D.A. 可填写版本将在其 PDF 文件加入项目后启用。",
+            loadError:
+                "无法加载表格目录。"
+        },
+        handoff: {
+            start:
+                "**在将您加入 IRD 支持队列之前，请告诉我您的名字。**\n" +
+                "这些转接信息会直接发送给 IRD 工作人员，不会加入 Gemini 对话。工作人员实时服务目前仅提供英语。",
+            cancelled:
+                "好的 — 已取消 IRD 实时支持请求。",
+            invalidFirst:
+                "**请只输入您的名字。**\n" +
+                "目前姓名字段接受字母、撇号和连字符。",
+            askLast:
+                "**谢谢。您的姓氏是什么？**",
+            invalidLast:
+                "**请输入您的姓氏。**\n" +
+                "目前姓名字段接受字母、空格、撇号和连字符。",
+            askEmail:
+                "**如果需要后续联系，IRD 工作人员应使用哪个电子邮件地址？**",
+            invalidEmail:
+                "**该电子邮件地址看起来无效。**\n" +
+                "请重新输入，例如：`name@example.com`，或输入 **取消**。",
+            askIssue:
+                "**请简要说明您希望 IRD 工作人员协助处理的问题。**\n" +
+                "请勿提供密码、银行卡资料、安全代码、身份验证代码或私人纳税人识别信息。",
+            issueTooShort:
+                "**请再提供一些问题详情，以便 IRD 工作人员了解情况。**",
+            joining:
+                "**谢谢。现在正在将您加入 IRD 支持队列。**",
+            cancelCommands: [
+                "取消",
+                "取消聊天",
+                "取消实时支持",
+                "cancel",
+                "cancel live chat"
+            ]
+        },
+        liveSupport: {
+            waiting: "正在等待 IRD 工作人员",
+            ticket: "票号",
+            queuePosition: "队列位置",
+            leaveQueue: "离开队列",
+            connected: "已连接 IRD 工作人员",
+            directMessage:
+                "消息现在会直接发送给工作人员。",
+            end: "结束实时聊天",
+            joinedActive:
+                "您已连接 **IRD 工作人员**。接下来的消息会直接发送给工作人员。工作人员服务目前使用英语。",
+            joinedQueue:
+                "您已加入 **IRD 实时支持队列**。管理员可以接受您的请求。等待期间您仍可输入消息。工作人员服务目前使用英语。",
+            unavailable:
+                "IRD 实时支持目前不可用。",
+            sendFailed:
+                "无法发送实时聊天消息。",
+            ended:
+                "**实时聊天已结束。**\n" +
+                "您已返回 A.I.D.A.，可以继续在这里提问。",
+            noActive:
+                "当前没有可结束的 IRD 实时支持会话。"
+        }
+    }
+};
+
+
+function getServiceCopy() {
+    return (
+        SERVICE_COPY[selectedLanguage] ||
+        SERVICE_COPY.en
+    );
+}
 
 
 function getSelectedLanguageOption() {
@@ -456,6 +1244,8 @@ function renderTermsForLanguage(languageCode) {
     termsAgreeCheckbox.disabled = false;
     termsAgreeCheckbox.checked = false;
     termsContinueButton.disabled = true;
+
+    applySelectedLanguageUi();
 }
 
 
@@ -550,6 +1340,8 @@ function acceptLanguageTerms() {
 
     chatInput.placeholder =
         option.placeholder;
+
+    applySelectedLanguageUi();
 
     sessionStarted = true;
 
@@ -762,12 +1554,17 @@ function registerUserActivity() {
 function createTimeoutBanner() {
     removeTimeoutBanner();
 
+    const ui = getUiCopy();
+
     const banner = document.createElement(
         "section"
     );
 
-    banner.className = "session-timeout-banner";
-    banner.id = "session-timeout-banner";
+    banner.className =
+        "session-timeout-banner";
+
+    banner.id =
+        "session-timeout-banner";
 
     banner.innerHTML = `
         <div class="timeout-banner-icon" aria-hidden="true">
@@ -775,11 +1572,11 @@ function createTimeoutBanner() {
         </div>
 
         <div class="timeout-banner-copy">
-            <strong>Still with me?</strong>
+            <strong></strong>
             <span>
-                This chat will disconnect in
+                <span class="timeout-before"></span>
                 <b id="session-countdown-time">3:00</b>
-                without activity.
+                <span class="timeout-after"></span>
             </span>
         </div>
 
@@ -787,21 +1584,40 @@ function createTimeoutBanner() {
             class="timeout-still-here-button"
             id="timeout-still-here-button"
             type="button"
-        >
-            I’m still here
-        </button>
+        ></button>
     `;
 
-    banner
-        .querySelector(
+    banner.querySelector(
+        ".timeout-banner-copy strong"
+    ).textContent =
+        ui.timeout.title;
+
+    banner.querySelector(
+        ".timeout-before"
+    ).textContent =
+        `${ui.timeout.lineBefore} `;
+
+    banner.querySelector(
+        ".timeout-after"
+    ).textContent =
+        ` ${ui.timeout.lineAfter}`;
+
+    const stillHereButton =
+        banner.querySelector(
             "#timeout-still-here-button"
-        )
-        .addEventListener(
-            "click",
-            resumeSessionFromTimeout
         );
 
-    chatMessages.appendChild(banner);
+    stillHereButton.textContent =
+        ui.timeout.stillHere;
+
+    stillHereButton.addEventListener(
+        "click",
+        resumeSessionFromTimeout
+    );
+
+    chatMessages.appendChild(
+        banner
+    );
 
     scrollConversationToBottom();
 
@@ -854,9 +1670,7 @@ function beginStillTherePrompt() {
     stillTherePromptActive = true;
 
     addAssistantMessage(
-        "**Are you still there?**\n" +
-        "I haven’t seen any activity for a little while. " +
-        "This chat will close in **3 minutes** unless you continue."
+        getUiCopy().timeout.assistant
     );
 
     createTimeoutBanner();
@@ -1421,13 +2235,25 @@ function renderVoiceModeBanner(
 ) {
     removeVoiceModeBanner();
 
-    if (!voiceModeActive || sessionEnded) {
+    if (
+        !voiceModeActive ||
+        sessionEnded
+    ) {
         return;
     }
 
-    const banner = document.createElement("section");
-    banner.id = "voice-mode-banner";
-    banner.className = "voice-mode-banner direct-live";
+    const ui = getUiCopy();
+
+    const banner =
+        document.createElement(
+            "section"
+        );
+
+    banner.id =
+        "voice-mode-banner";
+
+    banner.className =
+        "voice-mode-banner direct-live";
 
     banner.innerHTML = `
         <span class="voice-mode-orb" aria-hidden="true">
@@ -1435,49 +2261,77 @@ function renderVoiceModeBanner(
         </span>
 
         <div class="voice-mode-copy">
-            <strong>Gemini Live Voice Mode</strong>
+            <strong></strong>
             <span id="voice-mode-status-text"></span>
-            <small>
-                Direct Gemini connection · do not share sensitive information
-            </small>
+            <small></small>
         </div>
 
         <button
             class="voice-mode-end-button"
             type="button"
-        >
-            End
-        </button>
+        ></button>
     `;
 
     banner.querySelector(
-        "#voice-mode-status-text"
-    ).textContent = statusText;
+        ".voice-mode-copy strong"
+    ).textContent =
+        ui.voice.title;
 
     banner.querySelector(
-        ".voice-mode-end-button"
-    ).addEventListener(
+        ".voice-mode-copy small"
+    ).textContent =
+        ui.voice.privacyLine;
+
+    banner.querySelector(
+        "#voice-mode-status-text"
+    ).textContent =
+        localizeVoiceStatus(
+            statusText
+        );
+
+    const endButton =
+        banner.querySelector(
+            ".voice-mode-end-button"
+        );
+
+    endButton.textContent =
+        ui.voice.end;
+
+    endButton.addEventListener(
         "click",
         () => deactivateVoiceMode()
     );
 
     if (chatFooter) {
-        chatWidget.insertBefore(banner, chatFooter);
+        chatWidget.insertBefore(
+            banner,
+            chatFooter
+        );
     } else {
-        chatMessages.appendChild(banner);
+        chatMessages.appendChild(
+            banner
+        );
     }
 }
 
 
 function updateVoiceModeStatus(statusText) {
+    const localizedStatus =
+        localizeVoiceStatus(
+            statusText
+        );
+
     const status = document.getElementById(
         "voice-mode-status-text"
     );
 
     if (status) {
-        status.textContent = statusText;
+        status.textContent =
+            localizedStatus;
     } else if (voiceModeActive) {
-        renderVoiceModeBanner(statusText);
+        renderVoiceModeBanner(
+            statusText
+        );
     }
 }
 
@@ -2491,7 +3345,10 @@ async function connectGeminiLive() {
 
 
 function showVoiceModePrivacyNotice() {
-    if (voiceModeActive || sessionEnded) {
+    if (
+        voiceModeActive ||
+        sessionEnded
+    ) {
         return;
     }
 
@@ -2505,9 +3362,18 @@ function showVoiceModePrivacyNotice() {
 
     closeHelpDrawer();
 
-    const card = document.createElement("section");
-    card.id = "voice-mode-consent-card";
-    card.className = "voice-mode-consent-card";
+    const ui = getUiCopy();
+
+    const card =
+        document.createElement(
+            "section"
+        );
+
+    card.id =
+        "voice-mode-consent-card";
+
+    card.className =
+        "voice-mode-consent-card";
 
     card.innerHTML = `
         <div class="voice-mode-consent-icon">
@@ -2515,58 +3381,85 @@ function showVoiceModePrivacyNotice() {
         </div>
 
         <div class="voice-mode-consent-copy">
-            <strong>Gemini Live Voice Mode</strong>
+            <strong></strong>
 
-            <p>
-                For faster real-time conversation, Voice Mode connects
-                your live microphone audio <b>directly to Google Gemini</b>.
-            </p>
-
-            <p>
-                <b>Do not say sensitive information</b>, including passwords,
-                card or banking details, security/authentication codes,
-                taxpayer identifiers, private account numbers, or other
-                confidential personal information.
-            </p>
-
-            <p>
-                A.I.D.A. will transcribe both sides of the live conversation
-                into this chat as you speak.
-            </p>
+            <p class="voice-consent-direct"></p>
+            <p class="voice-consent-sensitive"></p>
+            <p class="voice-consent-transcript"></p>
 
             <div class="voice-mode-consent-actions">
                 <button
                     class="voice-mode-consent-start"
                     type="button"
-                >
-                    Start Voice Mode
-                </button>
+                ></button>
 
                 <button
                     class="voice-mode-consent-cancel"
                     type="button"
-                >
-                    Cancel
-                </button>
+                ></button>
             </div>
         </div>
     `;
 
     card.querySelector(
-        ".voice-mode-consent-cancel"
-    ).addEventListener("click", () => {
-        card.remove();
-    });
+        ".voice-mode-consent-copy > strong"
+    ).textContent =
+        ui.voice.consentTitle;
 
     card.querySelector(
-        ".voice-mode-consent-start"
-    ).addEventListener("click", async () => {
-        card.remove();
-        await activateVoiceMode();
-    });
+        ".voice-consent-direct"
+    ).textContent =
+        ui.voice.consentDirect;
 
-    chatMessages.appendChild(card);
-    scrollConversationToBottom(true);
+    card.querySelector(
+        ".voice-consent-sensitive"
+    ).textContent =
+        ui.voice.consentSensitive;
+
+    card.querySelector(
+        ".voice-consent-transcript"
+    ).textContent =
+        ui.voice.consentTranscript;
+
+    const startButton =
+        card.querySelector(
+            ".voice-mode-consent-start"
+        );
+
+    const cancelButton =
+        card.querySelector(
+            ".voice-mode-consent-cancel"
+        );
+
+    startButton.textContent =
+        ui.voice.start;
+
+    cancelButton.textContent =
+        ui.voice.cancel;
+
+    cancelButton.addEventListener(
+        "click",
+        () => {
+            card.remove();
+        }
+    );
+
+    startButton.addEventListener(
+        "click",
+        async () => {
+            card.remove();
+
+            await activateVoiceMode();
+        }
+    );
+
+    chatMessages.appendChild(
+        card
+    );
+
+    scrollConversationToBottom(
+        true
+    );
 }
 
 
@@ -2580,7 +3473,7 @@ async function activateVoiceMode() {
         liveChatState === "active"
     ) {
         addAssistantMessage(
-            "Voice Mode is unavailable while you are connected to **IRD staff live support**.",
+            getUiCopy().voice.unavailableStaff,
             [],
             { countUnread: false }
         );
@@ -2589,8 +3482,7 @@ async function activateVoiceMode() {
 
     if (!navigator.mediaDevices?.getUserMedia) {
         addAssistantMessage(
-            "**Voice Mode needs microphone access.**\n" +
-            "Please use a current browser and allow microphone permission.",
+            getUiCopy().voice.microphoneNeeded,
             [],
             { countUnread: false }
         );
@@ -2686,7 +3578,7 @@ function deactivateVoiceMode(options = {}) {
 
     if (!options.silent && !sessionEnded) {
         addAssistantMessage(
-            "Voice Mode ended. You can continue with normal A.I.D.A. chat, the one-time microphone, forms, or IRD live support.",
+            getUiCopy().voice.ended,
             [],
             { countUnread: false }
         );
@@ -2886,16 +3778,18 @@ function toggleExpandedView() {
         String(expanded)
     );
 
+    const ui = getUiCopy();
+
     expandButton.setAttribute(
         "aria-label",
         expanded
-            ? "Return chatbot to normal size"
-            : "Make chatbot larger"
+            ? ui.composer.contract
+            : ui.composer.expand
     );
 
     expandButton.title = expanded
-        ? "Return to normal size"
-        : "Expand chatbot";
+        ? ui.composer.contract
+        : ui.composer.expand;
 
     window.setTimeout(
         scrollConversationToBottom,
@@ -2922,14 +3816,22 @@ function toggleHelpDrawer() {
         open
     );
 
-    helpButton.title = open
-        ? "Hide quick actions"
-        : "Show quick actions";
+    const ui = getUiCopy();
+
+    helpButton.title = (
+        open
+            ? ui.help.hideTitle
+            : ui.help.showTitle
+    );
 
     const label = helpButton.querySelector("span");
 
     if (label) {
-        label.textContent = open ? "Hide" : "Help";
+        label.textContent = (
+            open
+                ? ui.help.hide
+                : ui.help.button
+        );
     }
 
     window.setTimeout(
@@ -2949,12 +3851,17 @@ function closeHelpDrawer() {
     );
 
     helpButton.classList.remove("is-active");
-    helpButton.title = "Show quick actions";
+
+    const ui = getUiCopy();
+
+    helpButton.title =
+        ui.help.showTitle;
 
     const label = helpButton.querySelector("span");
 
     if (label) {
-        label.textContent = "Help";
+        label.textContent =
+            ui.help.button;
     }
 }
 
@@ -3279,29 +4186,69 @@ function createAvatar() {
 
 
 function createSpeechTools(messageText) {
-    const tools = document.createElement("div");
-    tools.className = "message-tools";
+    const ui = getUiCopy();
 
-    const button = document.createElement("button");
-    button.className = "speech-button";
-    button.type = "button";
-    button.title = "Listen to this response";
+    const tools =
+        document.createElement(
+            "div"
+        );
+
+    tools.className =
+        "message-tools";
+
+    const button =
+        document.createElement(
+            "button"
+        );
+
+    button.className =
+        "speech-button";
+
+    button.type =
+        "button";
+
+    button.title =
+        ui.speech.listenTitle;
+
     button.setAttribute(
         "aria-label",
-        "Play A.I.D.A. response"
+        ui.speech.playAria
     );
 
-    const icon = document.createElement("span");
-    icon.className = "speech-button-icon";
-    icon.innerHTML = iconSvg("speaker");
+    const icon =
+        document.createElement(
+            "span"
+        );
 
-    const label = document.createElement("span");
-    label.className = "speech-button-label";
-    label.textContent = "Listen";
+    icon.className =
+        "speech-button-icon";
 
-    const status = document.createElement("span");
-    status.className = "speech-status";
-    status.setAttribute("aria-live", "polite");
+    icon.innerHTML =
+        iconSvg("speaker");
+
+    const label =
+        document.createElement(
+            "span"
+        );
+
+    label.className =
+        "speech-button-label";
+
+    label.textContent =
+        ui.speech.listen;
+
+    const status =
+        document.createElement(
+            "span"
+        );
+
+    status.className =
+        "speech-status";
+
+    status.setAttribute(
+        "aria-live",
+        "polite"
+    );
 
     button.appendChild(icon);
     button.appendChild(label);
@@ -3309,13 +4256,16 @@ function createSpeechTools(messageText) {
     tools.appendChild(button);
     tools.appendChild(status);
 
-    button.addEventListener("click", () => {
-        toggleSpeech(
-            messageText,
-            button,
-            status
-        );
-    });
+    button.addEventListener(
+        "click",
+        () => {
+            toggleSpeech(
+                messageText,
+                button,
+                status
+            );
+        }
+    );
 
     return tools;
 }
@@ -3444,6 +4394,8 @@ function addAssistantMessage(
 // ---------------------------------------------------------
 
 function createFormResources(forms) {
+    const ui = getServiceCopy().forms;
+
     const section = document.createElement("section");
     section.className = "form-resources";
 
@@ -3456,12 +4408,16 @@ function createFormResources(forms) {
         </span>
 
         <div>
-            <strong>Choose your form option</strong>
-            <span>
-                Use the official IRD PDF or the A.I.D.A. fillable copy.
-            </span>
+            <strong></strong>
+            <span></span>
         </div>
     `;
+
+    heading.querySelector("strong").textContent =
+        ui.heading;
+
+    heading.querySelector("div > span").textContent =
+        ui.headingNote;
 
     const list = document.createElement("div");
     list.className = "form-resource-list";
@@ -3488,7 +4444,6 @@ function createFormResources(forms) {
 
         copy.appendChild(name);
         copy.appendChild(description);
-
         title.appendChild(badge);
         title.appendChild(copy);
 
@@ -3504,8 +4459,11 @@ function createFormResources(forms) {
 
         officialLink.innerHTML = `
             ${iconSvg("downloadFile")}
-            <span>${form.official_button_label || "Official IRD PDF"}</span>
+            <span></span>
         `;
+
+        officialLink.querySelector("span").textContent =
+            ui.officialButton;
 
         actions.appendChild(officialLink);
 
@@ -3515,8 +4473,11 @@ function createFormResources(forms) {
 
         fillableLink.innerHTML = `
             ${iconSvg("editFile")}
-            <span>A.I.D.A. Fillable PDF</span>
+            <span></span>
         `;
+
+        fillableLink.querySelector("span").textContent =
+            ui.fillableButton;
 
         if (
             form.fillable_available &&
@@ -3527,17 +4488,13 @@ function createFormResources(forms) {
             fillableLink.rel = "noopener noreferrer";
 
         } else {
-            fillableLink.classList.add(
-                "is-unavailable"
-            );
-
+            fillableLink.classList.add("is-unavailable");
             fillableLink.setAttribute(
                 "aria-disabled",
                 "true"
             );
-
             fillableLink.title =
-                "The fillable version is being prepared.";
+                ui.fillablePreparing;
         }
 
         actions.appendChild(fillableLink);
@@ -3549,9 +4506,7 @@ function createFormResources(forms) {
             const status = document.createElement("p");
             status.className = "fillable-status";
             status.textContent =
-                "The official PDF is available now. " +
-                "The A.I.D.A. fillable copy will activate when " +
-                "its PDF is added to the project.";
+                ui.fillableStatus;
 
             card.appendChild(status);
         }
@@ -3595,6 +4550,8 @@ function resetSpeechButton(button) {
         return;
     }
 
+    const ui = getUiCopy();
+
     button.classList.remove(
         "is-playing",
         "is-loading"
@@ -3609,17 +4566,21 @@ function resetSpeechButton(button) {
     );
 
     if (icon) {
-        icon.innerHTML = iconSvg("speaker");
+        icon.innerHTML =
+            iconSvg("speaker");
     }
 
     if (label) {
-        label.textContent = "Listen";
+        label.textContent =
+            ui.speech.listen;
     }
 
-    button.title = "Listen to this response";
+    button.title =
+        ui.speech.listenTitle;
+
     button.setAttribute(
         "aria-label",
-        "Play A.I.D.A. response"
+        ui.speech.playAria
     );
 }
 
@@ -3671,57 +4632,112 @@ function stopActiveSpeech() {
 }
 
 
-async function fetchSpeechAudio(messageText) {
-    if (speechCache.has(messageText)) {
-        return speechCache.get(messageText);
-    }
+function getSpeechCacheKey(messageText) {
+    return (
+        `${selectedLanguage || "en"}::` +
+        String(
+            messageText || ""
+        )
+    );
+}
 
-    if (speechRequestCache.has(messageText)) {
-        return speechRequestCache.get(messageText);
-    }
 
-    const speechRequest = (async () => {
-        const response = await fetch(
-            "/api/speech",
-            {
-                method: "POST",
-                headers: {
-                    "Content-Type": "application/json"
-                },
-                body: JSON.stringify({
-                    text: messageText
-                })
-            }
+async function fetchSpeechAudio(
+    messageText
+) {
+    const cacheKey =
+        getSpeechCacheKey(
+            messageText
         );
 
-        if (!response.ok) {
-            let payload = {};
+    if (
+        speechCache.has(
+            cacheKey
+        )
+    ) {
+        return speechCache.get(
+            cacheKey
+        );
+    }
 
-            try {
-                payload = await response.json();
-            } catch {
-                // Use fallback message.
+    if (
+        speechRequestCache.has(
+            cacheKey
+        )
+    ) {
+        return speechRequestCache.get(
+            cacheKey
+        );
+    }
+
+    const speechRequest = (
+        async () => {
+            const response =
+                await fetch(
+                    "/api/speech",
+                    {
+                        method: "POST",
+                        headers: {
+                            "Content-Type":
+                                "application/json"
+                        },
+                        body:
+                            JSON.stringify(
+                                {
+                                    text:
+                                        messageText,
+                                    language:
+                                        selectedLanguage ||
+                                        "en"
+                                }
+                            )
+                    }
+                );
+
+            if (!response.ok) {
+                let payload = {};
+
+                try {
+                    payload =
+                        await response.json();
+                } catch {
+                    // Use fallback message.
+                }
+
+                throw new Error(
+                    payload.error ||
+                    "Speech is unavailable for this response."
+                );
             }
 
-            throw new Error(
-                payload.error ||
-                "Speech is unavailable for this response."
+            const audioBlob =
+                await response.blob();
+
+            const audioUrl =
+                URL.createObjectURL(
+                    audioBlob
+                );
+
+            speechCache.set(
+                cacheKey,
+                audioUrl
             );
+
+            return audioUrl;
         }
+    )();
 
-        const audioBlob = await response.blob();
-        const audioUrl = URL.createObjectURL(audioBlob);
-
-        speechCache.set(messageText, audioUrl);
-        return audioUrl;
-    })();
-
-    speechRequestCache.set(messageText, speechRequest);
+    speechRequestCache.set(
+        cacheKey,
+        speechRequest
+    );
 
     try {
         return await speechRequest;
     } finally {
-        speechRequestCache.delete(messageText);
+        speechRequestCache.delete(
+            cacheKey
+        );
     }
 }
 
@@ -3884,7 +4900,12 @@ async function playCachedSpeech(
     button,
     statusElement
 ) {
-    const audioUrl = speechCache.get(messageText);
+    const audioUrl =
+        speechCache.get(
+            getSpeechCacheKey(
+                messageText
+            )
+        );
 
     if (!audioUrl) {
         return false;
@@ -3920,7 +4941,7 @@ async function playCachedSpeech(
 
     button.querySelector(
         ".speech-button-label"
-    ).textContent = "Pause";
+    ).textContent = getUiCopy().speech.pause;
 
     return true;
 }
@@ -3961,7 +4982,7 @@ async function streamSpeechResponse(
     button.classList.add("is-loading");
     button.querySelector(
         ".speech-button-label"
-    ).textContent = "Connecting";
+    ).textContent = getUiCopy().speech.connecting;
 
     const startedAt = performance.now();
 
@@ -3973,7 +4994,10 @@ async function streamSpeechResponse(
                 "Content-Type": "application/json"
             },
             body: JSON.stringify({
-                text: messageText
+                text: messageText,
+                language:
+                    selectedLanguage ||
+                    "en"
             }),
             signal: abortController.signal
         }
@@ -4022,13 +5046,13 @@ async function streamSpeechResponse(
 
             button.querySelector(
                 ".speech-button-label"
-            ).textContent = "Pause";
+            ).textContent = getUiCopy().speech.pause;
 
             const seconds =
                 (performance.now() - startedAt) / 1000;
 
             statusElement.textContent =
-                `Started in ${seconds.toFixed(1)}s`;
+                `${getUiCopy().speech.startedIn} ${seconds.toFixed(1)}s`;
         }
 
         schedulePcmChunk(
@@ -4049,8 +5073,12 @@ async function streamSpeechResponse(
         const pcm = concatenateByteChunks(chunks);
         const wav = pcmBytesToWavBlob(pcm, 24000);
         speechCache.set(
-            messageText,
-            URL.createObjectURL(wav)
+            getSpeechCacheKey(
+                messageText
+            ),
+            URL.createObjectURL(
+                wav
+            )
         );
     }
 
@@ -4108,7 +5136,7 @@ async function toggleSpeech(
 
             button.querySelector(
                 ".speech-button-label"
-            ).textContent = "Resume";
+            ).textContent = getUiCopy().speech.resume;
             return;
         }
 
@@ -4121,7 +5149,7 @@ async function toggleSpeech(
 
             button.querySelector(
                 ".speech-button-label"
-            ).textContent = "Pause";
+            ).textContent = getUiCopy().speech.pause;
             return;
         }
     }
@@ -4140,7 +5168,7 @@ async function toggleSpeech(
 
         button.querySelector(
             ".speech-button-label"
-        ).textContent = "Resume";
+        ).textContent = getUiCopy().speech.resume;
         return;
     }
 
@@ -4158,14 +5186,20 @@ async function toggleSpeech(
 
         button.querySelector(
             ".speech-button-label"
-        ).textContent = "Pause";
+        ).textContent = getUiCopy().speech.pause;
         return;
     }
 
     stopActiveSpeech();
 
     try {
-        if (speechCache.has(messageText)) {
+        if (
+            speechCache.has(
+                getSpeechCacheKey(
+                    messageText
+                )
+            )
+        ) {
             await playCachedSpeech(
                 messageText,
                 button,
@@ -4192,12 +5226,17 @@ async function toggleSpeech(
             button.classList.add("is-loading");
             button.querySelector(
                 ".speech-button-label"
-            ).textContent = "Fallback";
+            ).textContent = getUiCopy().speech.fallback;
 
             const audioUrl =
                 await fetchSpeechAudio(messageText);
 
-            speechCache.set(messageText, audioUrl);
+            speechCache.set(
+                getSpeechCacheKey(
+                    messageText
+                ),
+                audioUrl
+            );
 
             await playCachedSpeech(
                 messageText,
@@ -4220,25 +5259,55 @@ async function toggleSpeech(
 // ---------------------------------------------------------
 
 function buildHelpDrawer() {
+    const ui = getUiCopy();
+
     quickActionsGrid.replaceChildren();
     popularQuestionsContainer.replaceChildren();
 
     quickActions.forEach((action) => {
-        const button = document.createElement("button");
+        const button =
+            document.createElement(
+                "button"
+            );
 
-        button.className = "quick-action-card";
-        button.type = "button";
+        button.className =
+            "quick-action-card";
 
-        if (action.tone === "orange") {
-            button.dataset.tone = "orange";
+        button.type =
+            "button";
+
+        if (
+            action.tone === "orange"
+        ) {
+            button.dataset.tone =
+                "orange";
         }
 
-        const displayLabel = (
+        const baseLabel = (
+            ui.quickActions[
+                action.label
+            ] ||
+            action.label
+        );
+
+        let displayLabel = (
             action.action === "voice" &&
             voiceModeActive
         )
-            ? "End Voice Mode"
-            : action.label;
+            ? ui.quickActions.endVoiceMode
+            : baseLabel;
+
+        if (
+            selectedLanguage !== "en" &&
+            (
+                action.action === "forms" ||
+                action.action === "liveChat"
+            )
+        ) {
+            displayLabel += (
+                ` · ${ui.englishOnly.short}`
+            );
+        }
 
         button.classList.toggle(
             "voice-mode-card",
@@ -4259,65 +5328,116 @@ function buildHelpDrawer() {
             <span>${displayLabel}</span>
         `;
 
-        button.addEventListener("click", () => {
-            closeHelpDrawer();
+        button.addEventListener(
+            "click",
+            () => {
+                closeHelpDrawer();
 
-            if (action.action === "forms") {
-                showAllForms();
-                return;
-            }
+                if (
+                    action.action === "forms"
+                ) {
+                    showEnglishOnlyServiceNotice(
+                        "forms"
+                    );
 
-            if (action.action === "liveChat") {
-                startLiveHandoffIntake(
-                    action.label
+                    showAllForms();
+                    return;
+                }
+
+                if (
+                    action.action === "liveChat"
+                ) {
+                    showEnglishOnlyServiceNotice(
+                        "liveChat"
+                    );
+
+                    startLiveHandoffIntake(
+                        baseLabel
+                    );
+
+                    return;
+                }
+
+                if (
+                    action.action === "voice"
+                ) {
+                    toggleVoiceMode();
+                    return;
+                }
+
+                const localizedQuestion = (
+                    ui.quickActionQuestions[
+                        action.label
+                    ] ||
+                    action.question
                 );
-                return;
+
+                submitMessage(
+                    localizedQuestion,
+                    baseLabel,
+                    {
+                        voiceMode:
+                            voiceModeActive,
+                        autoSpeak:
+                            voiceModeActive
+                    }
+                );
             }
+        );
 
-            if (action.action === "voice") {
-                toggleVoiceMode();
-                return;
-            }
-
-            submitMessage(
-                action.question,
-                action.label,
-                {
-                    voiceMode: voiceModeActive,
-                    autoSpeak: voiceModeActive
-                }
-            );
-        });
-
-        quickActionsGrid.appendChild(button);
+        quickActionsGrid.appendChild(
+            button
+        );
     });
 
-    popularQuestions.forEach((question) => {
-        const button = document.createElement("button");
+    popularQuestions.forEach(
+        (question, index) => {
+            const localizedQuestion = (
+                ui.popularQuestions[
+                    index
+                ] ||
+                question
+            );
 
-        button.className = "popular-question";
-        button.type = "button";
+            const button =
+                document.createElement(
+                    "button"
+                );
 
-        button.innerHTML = `
-            <span>${question}</span>
-            <span class="popular-question-arrow">›</span>
-        `;
+            button.className =
+                "popular-question";
 
-        button.addEventListener("click", () => {
-            closeHelpDrawer();
+            button.type =
+                "button";
 
-            submitMessage(
-                question,
-                question,
-                {
-                    voiceMode: voiceModeActive,
-                    autoSpeak: voiceModeActive
+            button.innerHTML = `
+                <span>${localizedQuestion}</span>
+                <span class="popular-question-arrow">›</span>
+            `;
+
+            button.addEventListener(
+                "click",
+                () => {
+                    closeHelpDrawer();
+
+                    submitMessage(
+                        localizedQuestion,
+                        localizedQuestion,
+                        {
+                            voiceMode:
+                                voiceModeActive,
+                            autoSpeak:
+                                voiceModeActive
+                        }
+                    );
                 }
             );
-        });
 
-        popularQuestionsContainer.appendChild(button);
-    });
+            popularQuestionsContainer.appendChild(
+                button
+            );
+        }
+    );
 }
 
 
@@ -4326,30 +5446,35 @@ function buildHelpDrawer() {
 // ---------------------------------------------------------
 
 async function showAllForms() {
+    const ui = getServiceCopy().forms;
+
     addAssistantMessage(
-        "**Forms & Guides**\n" +
-        "Choose a form below. Each form shows two options:\n" +
-        "- The official IRD PDF\n" +
-        "- The A.I.D.A. fillable PDF, when that version has been added"
+        ui.intro
     );
 
     showTypingIndicator();
 
     try {
-        const response = await fetch("/api/forms");
-        const payload = await response.json();
+        const response =
+            await fetch("/api/forms");
+
+        const payload =
+            await response.json();
 
         removeTypingIndicator();
 
         if (!response.ok) {
             throw new Error(
                 payload.error ||
-                "The forms catalogue could not be loaded."
+                ui.loadError
             );
         }
 
-        const group = document.createElement("div");
-        group.className = "message-group";
+        const group =
+            document.createElement("div");
+
+        group.className =
+            "message-group";
 
         group.appendChild(
             createFormResources(
@@ -4360,12 +5485,11 @@ async function showAllForms() {
         chatMessages.appendChild(group);
         scrollConversationToBottom();
 
-    } catch (error) {
+    } catch {
         removeTypingIndicator();
 
         addAssistantMessage(
-            error.message ||
-            "The forms catalogue could not be loaded."
+            ui.loadError
         );
     }
 }
@@ -4392,7 +5516,7 @@ function createTypingIndicator() {
     bubble.className = "typing-bubble";
     bubble.setAttribute(
         "aria-label",
-        "A.I.D.A. is typing"
+        getUiCopy().typing.aria
     );
 
     for (let index = 0; index < 3; index += 1) {
@@ -4406,7 +5530,8 @@ function createTypingIndicator() {
 
     const label = document.createElement("p");
     label.className = "typing-label";
-    label.textContent = "A.I.D.A. is typing...";
+    label.textContent =
+        getUiCopy().typing.label;
 
     block.appendChild(row);
     block.appendChild(label);
@@ -4480,62 +5605,108 @@ function removeLiveChatBanner() {
 }
 
 
-function renderLiveChatBanner(statusPayload = {}) {
-    let banner = document.getElementById(
-        "live-chat-status-banner"
-    );
+function renderLiveChatBanner(
+    statusPayload = {}
+) {
+    const ui =
+        getServiceCopy().liveSupport;
+
+    let banner =
+        document.getElementById(
+            "live-chat-status-banner"
+        );
 
     if (!banner) {
-        banner = document.createElement("section");
-        banner.className = "live-chat-status-banner";
-        banner.id = "live-chat-status-banner";
-        chatMessages.appendChild(banner);
+        banner =
+            document.createElement("section");
+
+        banner.className =
+            "live-chat-status-banner";
+
+        banner.id =
+            "live-chat-status-banner";
+
+        chatMessages.appendChild(
+            banner
+        );
     }
 
-    const ticket = statusPayload.ticket ||
-        sessionId.slice(0, 8);
+    const ticket = (
+        statusPayload.ticket ||
+        sessionId.slice(0, 8)
+    );
 
-    if (liveChatState === "queued") {
-        const position = Number(
-            statusPayload.position || 0
-        );
+    if (
+        liveChatState === "queued"
+    ) {
+        const position =
+            Number(
+                statusPayload.position ||
+                0
+            );
 
         banner.innerHTML = `
             <span class="live-chat-status-dot waiting"></span>
             <div>
-                <strong>Waiting for IRD staff</strong>
-                <span>
-                    Ticket ${ticket}
-                    ${position ? ` · Queue position #${position}` : ""}
-                </span>
+                <strong></strong>
+                <span class="live-ticket-line"></span>
             </div>
             <button
                 type="button"
                 class="live-chat-end-button"
-            >
-                Leave queue
-            </button>
+            ></button>
         `;
+
+        banner.querySelector("strong").textContent =
+            ui.waiting;
+
+        banner.querySelector(
+            ".live-ticket-line"
+        ).textContent = (
+            `${ui.ticket} ${ticket}` +
+            (
+                position
+                    ? ` · ${ui.queuePosition} #${position}`
+                    : ""
+            )
+        );
+
+        banner.querySelector(
+            ".live-chat-end-button"
+        ).textContent =
+            ui.leaveQueue;
+
     } else {
         banner.innerHTML = `
             <span class="live-chat-status-dot connected"></span>
             <div>
-                <strong>Connected to IRD staff</strong>
-                <span>
-                    Ticket ${ticket} · Messages now go directly to the staff representative.
-                </span>
+                <strong></strong>
+                <span class="live-ticket-line"></span>
             </div>
             <button
                 type="button"
                 class="live-chat-end-button"
-            >
-                End live chat
-            </button>
+            ></button>
         `;
+
+        banner.querySelector("strong").textContent =
+            ui.connected;
+
+        banner.querySelector(
+            ".live-ticket-line"
+        ).textContent =
+            `${ui.ticket} ${ticket} · ${ui.directMessage}`;
+
+        banner.querySelector(
+            ".live-chat-end-button"
+        ).textContent =
+            ui.end;
     }
 
     banner
-        .querySelector(".live-chat-end-button")
+        .querySelector(
+            ".live-chat-end-button"
+        )
         ?.addEventListener(
             "click",
             () => endLiveChatSession()
@@ -4722,6 +5893,9 @@ function startLiveHandoffIntake(
         return;
     }
 
+    const ui =
+        getServiceCopy().handoff;
+
     deactivateVoiceMode({
         silent: true
     });
@@ -4742,8 +5916,7 @@ function startLiveHandoffIntake(
     };
 
     addAssistantMessage(
-        "**Before I place you in the IRD support queue, what is your first name?**\n" +
-        "This handoff information goes directly to IRD staff and is not added to the Gemini conversation.",
+        ui.start,
         [],
         {
             countUnread: false
@@ -4762,35 +5935,34 @@ async function handleLiveHandoffIntake(
         return false;
     }
 
-    const cleaned = String(
-        messageText || ""
-    ).trim();
+    const ui =
+        getServiceCopy().handoff;
+
+    const cleaned =
+        String(
+            messageText || ""
+        ).trim();
 
     if (!cleaned) {
         return true;
     }
 
-    const cancelCommands = [
-        "cancel",
-        "cancel live chat",
-        "cancel live support",
-        "nevermind",
-        "never mind"
-    ];
+    const lower =
+        cleaned.toLowerCase();
 
     if (
-        cancelCommands.includes(
-            cleaned.toLowerCase()
+        ui.cancelCommands.some(
+            (command) => (
+                lower ===
+                command.toLowerCase()
+            )
         )
     ) {
-        addUserMessage(
-            cleaned
-        );
-
+        addUserMessage(cleaned);
         resetLiveHandoffIntake();
 
         addAssistantMessage(
-            "No problem — I cancelled the IRD live-support request.",
+            ui.cancelled,
             [],
             {
                 countUnread: false
@@ -4799,11 +5971,6 @@ async function handleLiveHandoffIntake(
 
         return true;
     }
-
-
-    // ---------------------------------------------------------
-    // First name
-    // ---------------------------------------------------------
 
     if (
         liveHandoffIntake.step ===
@@ -4815,8 +5982,7 @@ async function handleLiveHandoffIntake(
             )
         ) {
             addAssistantMessage(
-                "**Please enter your first name only.**\n" +
-                "Letters, apostrophes and hyphens are accepted.",
+                ui.invalidFirst,
                 [],
                 {
                     countUnread: false
@@ -4826,21 +5992,16 @@ async function handleLiveHandoffIntake(
             return true;
         }
 
-        addUserMessage(
-            cleaned
-        );
+        addUserMessage(cleaned);
 
         liveHandoffIntake.first_name =
-            cleaned.slice(
-                0,
-                50
-            );
+            cleaned.slice(0, 50);
 
         liveHandoffIntake.step =
             "last_name";
 
         addAssistantMessage(
-            "**Thank you. What is your last name?**",
+            ui.askLast,
             [],
             {
                 countUnread: false
@@ -4848,14 +6009,8 @@ async function handleLiveHandoffIntake(
         );
 
         chatInput.value = "";
-
         return true;
     }
-
-
-    // ---------------------------------------------------------
-    // Last name
-    // ---------------------------------------------------------
 
     if (
         liveHandoffIntake.step ===
@@ -4867,8 +6022,7 @@ async function handleLiveHandoffIntake(
             )
         ) {
             addAssistantMessage(
-                "**Please enter your last name.**\n" +
-                "Letters, spaces, apostrophes and hyphens are accepted.",
+                ui.invalidLast,
                 [],
                 {
                     countUnread: false
@@ -4878,15 +6032,10 @@ async function handleLiveHandoffIntake(
             return true;
         }
 
-        addUserMessage(
-            cleaned
-        );
+        addUserMessage(cleaned);
 
         liveHandoffIntake.last_name =
-            cleaned.slice(
-                0,
-                70
-            );
+            cleaned.slice(0, 70);
 
         liveHandoffIntake.contact_name = (
             `${liveHandoffIntake.first_name} ` +
@@ -4897,7 +6046,7 @@ async function handleLiveHandoffIntake(
             "email";
 
         addAssistantMessage(
-            "**What email address should the IRD representative use if follow-up is needed?**",
+            ui.askEmail,
             [],
             {
                 countUnread: false
@@ -4905,14 +6054,8 @@ async function handleLiveHandoffIntake(
         );
 
         chatInput.value = "";
-
         return true;
     }
-
-
-    // ---------------------------------------------------------
-    // Email address
-    // ---------------------------------------------------------
 
     if (
         liveHandoffIntake.step ===
@@ -4924,8 +6067,7 @@ async function handleLiveHandoffIntake(
             )
         ) {
             addAssistantMessage(
-                "**That email address does not look valid.**\n" +
-                "Please enter it again, for example: `name@example.com`, or type **cancel**.",
+                ui.invalidEmail,
                 [],
                 {
                     countUnread: false
@@ -4935,24 +6077,18 @@ async function handleLiveHandoffIntake(
             return true;
         }
 
-        addUserMessage(
-            cleaned
-        );
+        addUserMessage(cleaned);
 
         liveHandoffIntake.contact_email =
             cleaned
                 .toLowerCase()
-                .slice(
-                    0,
-                    200
-                );
+                .slice(0, 200);
 
         liveHandoffIntake.step =
             "issue";
 
         addAssistantMessage(
-            "**Briefly describe the issue you want the IRD representative to help with.**\n" +
-            "Please do not include passwords, card details, security codes, authentication codes or private taxpayer identifiers.",
+            ui.askIssue,
             [],
             {
                 countUnread: false
@@ -4960,14 +6096,8 @@ async function handleLiveHandoffIntake(
         );
 
         chatInput.value = "";
-
         return true;
     }
-
-
-    // ---------------------------------------------------------
-    // Issue description
-    // ---------------------------------------------------------
 
     if (
         liveHandoffIntake.step ===
@@ -4977,7 +6107,7 @@ async function handleLiveHandoffIntake(
             cleaned.length < 5
         ) {
             addAssistantMessage(
-                "**Please give the IRD representative a little more detail about the issue.**",
+                ui.issueTooShort,
                 [],
                 {
                     countUnread: false
@@ -4987,15 +6117,10 @@ async function handleLiveHandoffIntake(
             return true;
         }
 
-        addUserMessage(
-            cleaned
-        );
+        addUserMessage(cleaned);
 
         liveHandoffIntake.issue =
-            cleaned.slice(
-                0,
-                1000
-            );
+            cleaned.slice(0, 1000);
 
         const intake = {
             ...liveHandoffIntake
@@ -5004,7 +6129,7 @@ async function handleLiveHandoffIntake(
         resetLiveHandoffIntake();
 
         addAssistantMessage(
-            "**Thank you. I’m placing you in the IRD support queue now.**",
+            ui.joining,
             [],
             {
                 countUnread: false
@@ -5090,7 +6215,7 @@ async function beginLiveChatSession(
         if (!response.ok) {
             throw new Error(
                 payload.error ||
-                "IRD live support is unavailable right now."
+                getServiceCopy().liveSupport.unavailable
             );
         }
 
@@ -5100,19 +6225,17 @@ async function beginLiveChatSession(
 
         renderLiveChatBanner(payload);
 
+        const liveUi =
+            getServiceCopy().liveSupport;
+
         addAssistantMessage(
             liveChatState === "active"
-                ? (
-                    "You’re connected to **IRD staff**. " +
-                    "Your next messages will go directly to the representative."
-                )
-                : (
-                    "You’ve joined the **IRD live-support queue**. " +
-                    "An administrator can accept your ticket from the staff dashboard. " +
-                    "You can type a message while you wait."
-                ),
+                ? liveUi.joinedActive
+                : liveUi.joinedQueue,
             [],
-            { countUnread: false }
+            {
+                countUnread: false
+            }
         );
 
         startLiveChatPolling();
@@ -5124,7 +6247,7 @@ async function beginLiveChatSession(
 
         addAssistantMessage(
             error.message ||
-            "IRD live support is unavailable right now."
+            getServiceCopy().liveSupport.unavailable
         );
     }
 }
@@ -5160,14 +6283,14 @@ async function sendLiveChatUserMessage(messageText) {
         if (!response.ok) {
             throw new Error(
                 payload.error ||
-                "Your live-chat message could not be sent."
+                getServiceCopy().liveSupport.sendFailed
             );
         }
 
     } catch (error) {
         addAssistantMessage(
             error.message ||
-            "Your live-chat message could not be sent."
+            getServiceCopy().liveSupport.sendFailed
         );
     }
 }
@@ -5203,10 +6326,11 @@ async function endLiveChatSession(options = {}) {
 
     if (!options.silent && !sessionEnded) {
         addAssistantMessage(
-            "**Live chat ended.**\n" +
-            "You’re back with A.I.D.A. and can continue asking questions here.",
+            getServiceCopy().liveSupport.ended,
             [],
-            { countUnread: false }
+            {
+                countUnread: false
+            }
         );
     }
 }
@@ -5347,9 +6471,11 @@ async function submitMessage(
             await endLiveChatSession();
         } else {
             addAssistantMessage(
-                "There is no active IRD live-support session to end.",
+                getServiceCopy().liveSupport.noActive,
                 [],
-                { countUnread: false }
+                {
+                    countUnread: false
+                }
             );
         }
         return;

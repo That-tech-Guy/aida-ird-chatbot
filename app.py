@@ -517,7 +517,7 @@ def ask_aida(
     language_names = {
         "en": "English",
         "es": "Spanish",
-        "fr": "French",
+        "zh": "Simplified Chinese",
     }
 
     response_language = language_names.get(
@@ -919,55 +919,131 @@ def extract_gemini_audio(response: Any) -> bytes | None:
     return None
 
 
-def build_aida_voice_prompt(transcript: str) -> str:
-    """Shared A.I.D.A. voice direction for normal streaming TTS."""
+def normalise_speech_language(
+    language: str | None,
+) -> str:
+    """Return one of A.I.D.A.'s supported speech language codes."""
+
+    cleaned = str(
+        language or "en"
+    ).strip().lower()
+
+    if cleaned not in {
+        "en",
+        "es",
+        "zh",
+    }:
+        return "en"
+
+    return cleaned
+
+
+def build_aida_voice_prompt(
+    transcript: str,
+    language: str = "en",
+) -> str:
+    """
+    Build the TTS performance prompt using the onboarding language.
+
+    The TTS request reads the supplied response exactly as written and
+    must not translate it into another language.
+    """
+
+    language = normalise_speech_language(
+        language
+    )
+
+    if language == "es":
+        language_rule = """
+LANGUAGE — SPANISH
+
+Read the transcript in natural Spanish.
+
+Do not translate it into English or another language.
+Do not switch languages.
+
+Use natural Spanish pronunciation while keeping A.I.D.A.'s warm, calm,
+professional Anguillan public-service personality.
+
+Do not force English phonology onto Spanish words.
+"""
+
+    elif language == "zh":
+        language_rule = """
+LANGUAGE — SIMPLIFIED CHINESE
+
+Read the transcript in natural Mandarin Chinese appropriate for Simplified
+Chinese text.
+
+Do not translate it into English or another language.
+Do not switch languages.
+
+Use clear natural Mandarin pronunciation while keeping A.I.D.A.'s warm,
+calm, professional Anguillan public-service personality.
+
+Do not force Anguillan-English pronunciation onto Chinese words.
+"""
+
+    else:
+        language_rule = """
+LANGUAGE — ENGLISH
+
+Read the transcript in English.
+
+Speak with a natural Anguillan English accent from Anguilla in the Eastern
+Caribbean.
+
+Use natural Anguillan rhythm, melody, pronunciation and conversational pacing.
+Keep the Anguillan character noticeable but subtle and authentic.
+
+Avoid sounding Jamaican, Trinidadian, Bajan, American, British, or like a
+generic Caribbean accent.
+"""
 
     return f"""
-VOICE STYLE
+VOICE IDENTITY
 
 Professional Anguillan customer-service assistant.
 
-Speak with a natural Anguillan English accent from Anguilla in the
-Eastern Caribbean.
-
 The voice should sound like a friendly, knowledgeable Anguillan woman
 assisting members of the public through the Inland Revenue Department.
-She should sound warm, calm, confident, approachable, and professional.
 
-Use natural Anguillan rhythm, melody, pronunciation and conversational
-pacing. Keep the Anguillan character noticeable but subtle and authentic.
+She should sound warm, calm, confident, approachable, patient and professional.
 
-Avoid sounding Jamaican, Trinidadian, Bajan, American, British, or like
-a generic Caribbean accent. Do not use an exaggerated island or tourist
-voice.
+{language_rule}
 
-Use clear Standard English suitable for government and financial
-information while allowing natural Anguillan cadence and intonation.
+DELIVERY
 
-Speak at a moderate pace. Pronounce dates, money, tax types, deadlines,
-reference numbers and instructions especially clearly.
+Speak at a moderate pace.
 
-PERSONALITY
-- Friendly and welcoming
-- Patient and reassuring
-- Knowledgeable without sounding overly formal
-- Government-professional
-- Conversational rather than robotic
-- Locally Anguillan without heavy slang
+Pronounce dates, money, tax types, deadlines, reference numbers and
+instructions especially clearly.
+
+When explaining a process, slow down slightly and make each step easy to
+follow.
 
 PRONUNCIATION
+
 Pronounce A.I.D.A. as {AIDA_SPOKEN_NAME}.
-Pronounce Anguilla as {ANGUILLA_SPOKEN_NAME}.
+Pronounce Anguilla as {ANGUILLA_SPOKEN_NAME} when those words occur.
 
 OUTPUT RULE
-Read only the transcript below. Never read these directions aloud.
+
+Read only the transcript below.
+Do not summarize it.
+Do not translate it.
+Do not add words.
+Do not read these instructions aloud.
 
 TRANSCRIPT:
 {transcript}
 """
 
 
-def create_speech_audio(text: str) -> tuple[bytes, str]:
+def create_speech_audio(
+    text: str,
+    language: str = "en",
+) -> tuple[bytes, str]:
     """Generate a complete WAV response as the compatibility fallback."""
 
     if not GEMINI_API_KEY:
@@ -981,7 +1057,10 @@ def create_speech_audio(text: str) -> tuple[bytes, str]:
         raise ValueError("There is no readable text to speak.")
 
     client = genai.Client(api_key=GEMINI_API_KEY)
-    prompt = build_aida_voice_prompt(speech_text)
+    prompt = build_aida_voice_prompt(
+        speech_text,
+        language,
+    )
     last_error: Exception | None = None
 
     for _ in range(2):
@@ -1017,7 +1096,10 @@ def create_speech_audio(text: str) -> tuple[bytes, str]:
     )
 
 
-def iter_speech_pcm(text: str):
+def iter_speech_pcm(
+    text: str,
+    language: str = "en",
+):
     """Yield raw 24 kHz PCM chunks from Gemini 3.1 streaming TTS."""
 
     if not GEMINI_API_KEY:
@@ -1034,7 +1116,10 @@ def iter_speech_pcm(text: str):
 
     stream = client.models.generate_content_stream(
         model=GEMINI_TTS_MODEL,
-        contents=build_aida_voice_prompt(speech_text),
+        contents=build_aida_voice_prompt(
+            speech_text,
+            language,
+        ),
         config=types.GenerateContentConfig(
             response_modalities=["AUDIO"],
             speech_config=types.SpeechConfig(
@@ -1057,22 +1142,16 @@ def build_live_voice_instruction(language: str) -> str:
     """
     Build A.I.D.A.'s Gemini Live persona and current IRD context.
 
-    The files are re-read whenever a new Voice Mode session starts so
-    staff/admin content changes are reflected without editing JavaScript.
-
-    Authority order:
-    1. Master prompt safety/behaviour rules.
-    2. Verified primary IRD knowledge base.
-    3. Verified web/forms knowledge additions.
-    4. Staff deadline radar only as secondary operational context.
-
-    The deadline radar must never override a conflicting verified KB fact.
+    The voice identity is deliberately reinforced before AND after the
+    knowledge context. Gemini Live has less fine-grained accent control than
+    Gemini TTS, so repeating the performance rules helps prevent the voice
+    from drifting toward a generic delivery as the conversation continues.
     """
 
     language_names = {
         "en": "English",
         "es": "Spanish",
-        "fr": "French",
+        "zh": "Simplified Chinese",
     }
 
     language_name = language_names.get(
@@ -1080,8 +1159,7 @@ def build_live_voice_instruction(language: str) -> str:
         "English",
     )
 
-    # Re-read the currently managed files for every new Live session.
-    # Safe fallbacks preserve Voice Mode if an optional file is absent.
+    # Re-read staff-managed content whenever a new Voice Mode starts.
     try:
         current_master_prompt = read_required_text(
             MASTER_PROMPT_FILE
@@ -1113,113 +1191,135 @@ def build_live_voice_instruction(language: str) -> str:
             "No staff deadline-radar rows are currently available."
         )
 
-    return f"""
-A.I.D.A. GEMINI LIVE VOICE MODE
+    if language == "en":
+        language_delivery_rule = """
+For English speech, preserve A.I.D.A.'s Anguillan English identity throughout
+the entire session. Use natural Anguillan rhythm, melody, cadence and
+conversational pacing. The accent should be noticeable but subtle and
+authentic.
+"""
+    else:
+        language_delivery_rule = f"""
+Speak natural {language_name}, while preserving the same warm Anguillan
+A.I.D.A. speaker identity, calm Caribbean public-service rhythm, confidence,
+and friendliness. Do not force English pronunciation rules onto
+{language_name}.
+"""
 
-IDENTITY
+    return f"""
+A.I.D.A. — GEMINI LIVE VOICE MODE
+
+============================================================
+NON-NEGOTIABLE AUDIO IDENTITY
+============================================================
 
 You are A.I.D.A., the Anguilla Inland Revenue Department customer-service
 assistant.
 
-LANGUAGE LOCK
+The configured Gemini Live voice preset is:
+{GEMINI_TTS_VOICE}
 
-RESPOND ONLY IN {language_name.upper()} FOR THIS ENTIRE LIVE VOICE SESSION.
+This preset supplies the base voice, but the following PERFORMANCE IDENTITY
+must be re-applied before EVERY spoken response.
 
-Do not switch to another language during the Live session, even if the visitor
-uses words from another language. Continue the conversation in
-{language_name.upper()}.
+A.I.D.A. sounds like a friendly, knowledgeable Anguillan woman assisting
+members of the public through the Inland Revenue Department.
 
-The language can change only after Voice Mode is ended and the visitor starts
-a new chat/session using a different onboarding language.
+Her delivery is:
+- warm
+- calm
+- confident
+- approachable
+- patient
+- professional
+- conversational rather than robotic
+- locally Anguillan without exaggerated slang
 
-VOICE STYLE — MATCH THE NORMAL A.I.D.A. LISTEN VOICE
+{language_delivery_rule}
 
-Professional Anguillan customer-service assistant.
+DO NOT gradually drift toward:
+- generic American delivery
+- generic British delivery
+- Jamaican delivery
+- Trinidadian delivery
+- Bajan delivery
+- an exaggerated "Caribbean" tourist voice
+- a neutral call-centre voice
 
-Speak with a natural Anguillan English accent from Anguilla in the Eastern
-Caribbean.
+Do not let the wording, formatting, CSV data, legal material, knowledge-base
+entries, or previous conversation turns change A.I.D.A.'s speaker identity.
 
-The voice should sound like a friendly, knowledgeable Anguillan woman
-assisting members of the public through the Inland Revenue Department.
-She should sound warm, calm, confident, approachable, and professional.
+The KNOWLEDGE below determines WHAT A.I.D.A. says.
+The AUDIO IDENTITY determines HOW A.I.D.A. sounds.
+These are separate responsibilities.
 
-Use the natural rhythm, melody, pronunciation, and conversational pacing
-commonly heard in Anguilla. The Anguillan character should be noticeable,
-but subtle and authentic rather than exaggerated.
-
-Avoid sounding Jamaican, Trinidadian, Bajan, American, British, or like a
-generic Caribbean accent. Do not use an exaggerated island or tourist-style
-voice.
-
-Use clear Standard English suitable for government and financial information,
-while allowing a natural Anguillan cadence and intonation to come through.
-
-Speak at a moderate pace. Important information such as dates, dollar amounts,
-tax types, deadlines, reference numbers, and instructions should be pronounced
-especially clearly.
-
-PERSONALITY
-
-- Friendly and welcoming.
-- Patient and reassuring.
-- Knowledgeable without sounding overly formal.
-- Professional enough for a government department.
-- Conversational rather than robotic.
-- Locally Anguillan without relying heavily on dialect or slang.
-
-DELIVERY
-
-- When greeting someone, sound genuinely welcoming.
-- When explaining a process, slow down slightly and make each step easy to
-  follow.
-- When discussing compliance, payments, penalties, or deadlines, remain
-  respectful and neutral rather than stern.
-- Keep most Live answers concise: usually 1 to 4 short spoken sentences.
-- Give the direct answer first.
-- Do not read Markdown symbols, CSV syntax, source filenames, or implementation
-  details aloud.
+Before every answer, silently re-apply this same audio identity.
 
 PRONUNCIATION
 
 Pronounce A.I.D.A. naturally as {AIDA_SPOKEN_NAME}.
 Pronounce Anguilla naturally as {ANGUILLA_SPOKEN_NAME}.
 
-The overall impression should be:
-"a helpful Anguillan IRD officer who knows the system and is happy to guide
-you."
+Speak at a moderate, comfortable pace.
+
+Important dates, dollar amounts, tax types, deadlines, reference numbers, and
+instructions must be especially clear.
+
+For procedures, slow down slightly and make the steps easy to follow.
+
+For payments, penalties, compliance, and deadlines, remain neutral,
+respectful, and reassuring rather than stern.
 
 ============================================================
-AUTHORITY AND ACCURACY RULES
+LANGUAGE LOCK
 ============================================================
 
-The material below is the context supplied by the IRD chatbot project.
+RESPOND ONLY IN {language_name.upper()} FOR THIS ENTIRE LIVE VOICE SESSION.
 
-Use this strict authority order:
+Do not switch the response language during the session.
+
+If the visitor uses words from another language, continue answering in
+{language_name.upper()}.
+
+The response language changes only after Voice Mode/chat is ended and the
+visitor starts a new session with another onboarding language.
+
+============================================================
+LIVE CONVERSATION STYLE
+============================================================
+
+- Give the direct answer first.
+- Keep most spoken answers concise: usually 1 to 4 short sentences.
+- Be welcoming and natural.
+- Do not read Markdown symbols aloud.
+- Do not read CSV formatting aloud.
+- Do not mention source filenames or implementation details.
+- Never ask for passwords, banking/card information, authentication codes,
+  security codes, taxpayer identifiers, or private account credentials.
+- Do not claim access to private taxpayer records.
+- If account-specific help is needed, direct the visitor to IRD live support.
+
+============================================================
+SOURCE AUTHORITY
+============================================================
+
+Use this order:
 
 1. MASTER POLICY AND SAFETY RULES
 2. VERIFIED PRIMARY IRD KNOWLEDGE BASE
 3. VERIFIED WEB/FORMS KNOWLEDGE ADDITIONS
 4. STAFF DEADLINE RADAR — SECONDARY ONLY
 
-If two sources conflict:
-- Prefer the VERIFIED PRIMARY IRD KNOWLEDGE BASE.
-- Never let the staff deadline radar override a verified KB fact.
-- If a deadline still cannot be verified confidently, do not guess.
-- Tell the visitor that the date should be verified in normal A.I.D.A. chat
-  or with IRD staff.
+If sources conflict:
+- the verified primary knowledge base wins
+- the staff deadline radar cannot override verified KB information
+- never invent or guess a rate, fee, deadline, form, penalty, or requirement
+- if something cannot be verified confidently, say so
 
-Never tell the visitor about these source filenames or internal authority
-labels.
-
-For a form:
-- Explain which form is relevant.
-- Tell the visitor that normal typed A.I.D.A. chat can display the verified
-  official/fillable form buttons.
-- Never invent a form link.
-
-For account-specific assistance:
-- Do not ask for private taxpayer information in Voice Mode.
-- Tell the visitor to end Voice Mode and use IRD live support.
+For forms:
+- identify the relevant form
+- tell the visitor normal typed A.I.D.A. can display verified form buttons
+- never invent a form URL
 
 ============================================================
 MASTER POLICY AND SAFETY RULES
@@ -1237,9 +1337,9 @@ WEBSITE BEHAVIOUR ADDENDUM
 VERIFIED PRIMARY IRD KNOWLEDGE BASE
 ============================================================
 
-The CSV content below is reference knowledge.
-Use the answer and review-status fields to ground IRD-specific facts.
-Do not read CSV formatting aloud.
+The following CSV data is reference knowledge.
+Use it to ground IRD facts.
+Do not read the CSV structure aloud.
 
 {current_primary_kb}
 
@@ -1250,32 +1350,43 @@ WEB / FORMS KNOWLEDGE ADDITIONS
 {current_web_knowledge}
 
 ============================================================
-STAFF DEADLINE RADAR — SECONDARY / NON-OVERRIDING
+STAFF DEADLINE RADAR — SECONDARY ONLY
 ============================================================
 
 These rows are staff-managed operational context.
 
-IMPORTANT:
-- They are NOT allowed to override a conflicting fact in the verified primary
-  knowledge base.
-- If a row conflicts with verified knowledge, ignore the conflicting radar
-  date/details.
-- If its accuracy cannot be established from the verified context, say that
-  you cannot confidently verify the deadline rather than repeating it as fact.
+They cannot override a conflicting verified KB fact.
+
+If a deadline cannot be confidently verified from the higher-priority
+knowledge, do not repeat it as an authoritative deadline.
 
 {current_deadlines}
 
 ============================================================
-LIVE RESPONSE RULE
+FINAL AUDIO PERFORMANCE LOCK — APPLY ON EVERY TURN
 ============================================================
 
-Answer naturally as A.I.D.A. using the context above.
+Regardless of how much factual context appears above, DO NOT change A.I.D.A.'s
+speaker identity.
 
-For simple questions, keep the spoken answer short.
-For processes, give clear ordered steps.
-For dates, fees, rates, penalties, forms, or requirements, only state them
-when supported by the verified context.
-Never guess.
+Every spoken answer must still sound like the SAME A.I.D.A. who began the
+session:
+
+a warm, calm, confident, professional, naturally Anguillan IRD officer.
+
+For English:
+use subtle, authentic Anguillan English rhythm, melody, intonation, and
+conversational pacing.
+
+Do not become more American, British, Jamaican, Trinidadian, Bajan, generic
+Caribbean, robotic, or neutral as the conversation continues.
+
+The selected voice remains {GEMINI_TTS_VOICE}.
+
+Silently re-apply this performance direction immediately before generating
+EVERY spoken answer.
+
+Answer the visitor naturally using the verified IRD context above.
 """
 
 
@@ -1581,7 +1692,7 @@ def chat():
     if language not in {
         "en",
         "es",
-        "fr",
+        "zh",
     }:
         language = "en"
 
@@ -1820,6 +1931,13 @@ def speech_stream():
     payload = request.get_json(silent=True) or {}
     text = payload.get("text", "")
 
+    language = normalise_speech_language(
+        payload.get(
+            "language",
+            "en",
+        )
+    )
+
     if not isinstance(text, str) or not text.strip():
         return jsonify({
             "error": "There is no response text to speak.",
@@ -1827,7 +1945,12 @@ def speech_stream():
         }), 400
 
     try:
-        pcm_iterator = iter(iter_speech_pcm(text.strip()))
+        pcm_iterator = iter(
+            iter_speech_pcm(
+                text.strip(),
+                language,
+            )
+        )
         first_chunk = next(pcm_iterator)
 
     except StopIteration:
@@ -1932,7 +2055,7 @@ def voice_live_token():
     payload = request.get_json(silent=True) or {}
     language = str(payload.get("language", "en")).strip().lower()
 
-    if language not in {"en", "es", "fr"}:
+    if language not in {"en", "es", "zh"}:
         language = "en"
 
     try:
@@ -1998,11 +2121,20 @@ def speech():
 
     cleaned_text = text.strip()
 
+    language = normalise_speech_language(
+        payload.get(
+            "language",
+            "en",
+        )
+    )
+
     speech_cache_key = hashlib.sha256(
         (
             GEMINI_TTS_MODEL +
             "|" +
             GEMINI_TTS_VOICE +
+            "|" +
+            language +
             "|" +
             cleaned_text
         ).encode("utf-8")
@@ -2024,7 +2156,8 @@ def speech():
     else:
         try:
             audio_bytes, voice_used = create_speech_audio(
-                cleaned_text
+                cleaned_text,
+                language,
             )
 
         except ValueError as error:
