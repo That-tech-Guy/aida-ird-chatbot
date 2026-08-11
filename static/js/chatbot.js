@@ -103,6 +103,33 @@ let ignoreConversationScrollUntil = 0;
 
 let voiceModeActive = false;
 let voiceModeSpeaking = false;
+
+let geminiLiveSocket = null;
+let geminiLiveMediaStream = null;
+let geminiLiveInputContext = null;
+let geminiLiveInputProcessor = null;
+let geminiLiveInputSource = null;
+let geminiLiveSilentGain = null;
+let geminiLiveOutputContext = null;
+let geminiLiveOutputNextTime = 0;
+let geminiLiveOutputSources = new Set();
+let geminiLiveSetupComplete = false;
+let geminiLiveClosing = false;
+let geminiLiveSetupTimer = null;
+
+let geminiLiveInputText = "";
+let geminiLiveOutputText = "";
+let geminiLiveInputGroup = null;
+let geminiLiveOutputGroup = null;
+
+// Gemini can deliver transcription messages independently of turnComplete.
+// Keep each voice turn isolated instead of letting late transcript chunks
+// spill into the next user/assistant bubble.
+let geminiLiveTurnFinalizeTimer = null;
+let geminiLiveTurnCompletePending = false;
+
+let activeStreamingSpeech = null;
+
 let speechRecognition = null;
 let speechRecognitionActive = false;
 let recognitionAutoSubmit = false;
@@ -347,24 +374,24 @@ const LANGUAGE_OPTIONS = {
             "**¿Cómo puedo ayudarle hoy?**"
     },
 
-    zh: {
-        name: "中文",
-        speechRecognition: "zh-CN",
-        termsHeading: "使用条款",
+    fr: {
+        name: "Français",
+        speechRecognition: "fr-FR",
+        termsHeading: "Conditions d’utilisation",
         terms: [
-            "A.I.D.A. 仅提供安圭拉税务局的一般信息，不能替代官方意见或针对个人账户的协助。",
-            "请勿输入密码、银行或银行卡资料、安全验证码、身份验证代码或私人纳税人信息。",
-            "重要截止日期、金额、合规事项以及账户相关信息，请向安圭拉税务局核实。"
+            "A.I.D.A. fournit des informations générales du Département des recettes intérieures et ne remplace pas l’assistance officielle ou propre à un compte.",
+            "Ne saisissez pas de mots de passe, de coordonnées bancaires ou de carte, de codes de sécurité, de codes d’authentification ni d’informations fiscales privées.",
+            "Les échéances importantes, les montants, les questions de conformité et les informations propres à un compte doivent être vérifiés auprès du Département des recettes intérieures."
         ],
-        agreement: "我同意使用条款。",
-        continueLabel: "继续",
+        agreement: "J’accepte les Conditions d’utilisation.",
+        continueLabel: "Continuer",
         privacy:
-            "请勿输入密码、银行卡资料、银行信息或安全验证码。",
-        placeholder: "请在这里输入您的问题...",
+            "Veuillez ne pas saisir de mots de passe, de données de carte, d’informations bancaires ni de codes de sécurité.",
+        placeholder: "Saisissez votre question ici...",
         greeting:
-            "您好！👋 我是 **A.I.D.A.**，安圭拉税务局智能助理。 " +
-            "我可以协助您了解税务、执照、付款和表格等一般信息。\n\n" +
-            "**今天有什么可以帮您？**"
+            "Bonjour ! 👋 Je suis **A.I.D.A.**, votre assistante du Département des recettes intérieures d’Anguilla. " +
+            "Je peux vous aider avec les informations fiscales, les licences, les paiements et les formulaires.\n\n" +
+            "**Comment puis-je vous aider aujourd’hui ?**"
     }
 };
 
@@ -699,6 +726,7 @@ function scheduleInactivityWarning() {
         !sessionStarted ||
         sessionEnded ||
         stillTherePromptActive ||
+        voiceModeActive ||
         liveChatState === "queued" ||
         liveChatState === "active"
     ) {
@@ -809,7 +837,10 @@ function beginStillTherePrompt() {
     if (
         !sessionStarted ||
         sessionEnded ||
-        stillTherePromptActive
+        stillTherePromptActive ||
+        voiceModeActive ||
+        liveChatState === "queued" ||
+        liveChatState === "active"
     ) {
         return;
     }
@@ -821,13 +852,6 @@ function beginStillTherePrompt() {
     }
 
     stillTherePromptActive = true;
-
-    if (voiceModeActive) {
-        stopSpeechRecognition();
-        updateVoiceModeStatus(
-            "Paused — waiting for you to confirm you’re still here."
-        );
-    }
 
     addAssistantMessage(
         "**Are you still there?**\n" +
@@ -977,6 +1001,18 @@ async function endAidaSession(
 
 
 function disconnectSessionForInactivity() {
+    if (
+        voiceModeActive ||
+        liveChatState === "queued" ||
+        liveChatState === "active"
+    ) {
+        clearInactivityTimer();
+        clearDisconnectCountdown();
+        removeTimeoutBanner();
+        stillTherePromptActive = false;
+        return;
+    }
+
     void endAidaSession(
         "inactivity_timeout"
     );
@@ -1380,19 +1416,18 @@ function removeVoiceModeBanner() {
 }
 
 
-function renderVoiceModeBanner(statusText = "Listening…") {
+function renderVoiceModeBanner(
+    statusText = "Connecting…"
+) {
     removeVoiceModeBanner();
 
     if (!voiceModeActive || sessionEnded) {
         return;
     }
 
-    const banner = document.createElement(
-        "section"
-    );
-
+    const banner = document.createElement("section");
     banner.id = "voice-mode-banner";
-    banner.className = "voice-mode-banner";
+    banner.className = "voice-mode-banner direct-live";
 
     banner.innerHTML = `
         <span class="voice-mode-orb" aria-hidden="true">
@@ -1400,8 +1435,11 @@ function renderVoiceModeBanner(statusText = "Listening…") {
         </span>
 
         <div class="voice-mode-copy">
-            <strong>Voice Mode</strong>
+            <strong>Gemini Live Voice Mode</strong>
             <span id="voice-mode-status-text"></span>
+            <small>
+                Direct Gemini connection · do not share sensitive information
+            </small>
         </div>
 
         <button
@@ -1420,16 +1458,11 @@ function renderVoiceModeBanner(statusText = "Listening…") {
         ".voice-mode-end-button"
     ).addEventListener(
         "click",
-        () => {
-            deactivateVoiceMode();
-        }
+        () => deactivateVoiceMode()
     );
 
     if (chatFooter) {
-        chatWidget.insertBefore(
-            banner,
-            chatFooter
-        );
+        chatWidget.insertBefore(banner, chatFooter);
     } else {
         chatMessages.appendChild(banner);
     }
@@ -1443,289 +1476,1102 @@ function updateVoiceModeStatus(statusText) {
 
     if (status) {
         status.textContent = statusText;
-        return;
-    }
-
-    if (voiceModeActive) {
+    } else if (voiceModeActive) {
         renderVoiceModeBanner(statusText);
     }
 }
 
 
-function stopSpeechRecognition() {
-    suppressRecognitionRestart = true;
+function mergeLiveTranscriptText(existing, incoming) {
+    const previous = String(existing || "");
+    const next = String(incoming || "");
+
+    if (!previous) {
+        return next.trimStart();
+    }
+
+    if (next.startsWith(previous)) {
+        return next;
+    }
+
+    if (previous.endsWith(next)) {
+        return previous;
+    }
+
+    const space = (
+        !/\s$/.test(previous) &&
+        !/^[,.;:!?]/.test(next)
+    ) ? " " : "";
+
+    return previous + space + next;
+}
+
+
+function createLiveTranscriptGroup(role) {
+    const group = document.createElement("div");
+    group.className =
+        "message-group voice-live-transcript";
+
+    const row = document.createElement("div");
+    row.className = `message-row ${role}-row`;
+
+    if (role === "assistant") {
+        row.appendChild(createAvatar());
+    }
+
+    const column = document.createElement("div");
+    column.className = "message-column";
+
+    const bubble = document.createElement("div");
+    bubble.className = `message ${role}-message`;
+    bubble.dataset.liveTranscript = "true";
+
+    const time = document.createElement("div");
+    time.className = "message-time";
+    time.textContent = "Live";
+
+    column.appendChild(bubble);
+    column.appendChild(time);
+    row.appendChild(column);
+    group.appendChild(row);
+    chatMessages.appendChild(group);
+
+    scrollConversationToBottom();
+    return group;
+}
+
+
+function updateDirectLiveTranscript(role, text) {
+    if (!text) {
+        return;
+    }
+
+    const isUser = role === "user";
+
+    /*
+        A new visitor transcription after turnComplete means the next
+        conversational turn has started. Commit the previous turn before
+        creating this new visitor bubble.
+
+        Assistant transcript chunks are allowed a brief grace period because
+        Gemini documents that output transcription can arrive independently
+        of turnComplete.
+    */
+    if (
+        isUser &&
+        geminiLiveTurnCompletePending
+    ) {
+        commitDirectLiveTurn();
+    }
+
+    let group = isUser
+        ? geminiLiveInputGroup
+        : geminiLiveOutputGroup;
+
+    if (!group) {
+        group = createLiveTranscriptGroup(role);
+
+        if (isUser) {
+            geminiLiveInputGroup = group;
+        } else {
+            geminiLiveOutputGroup = group;
+        }
+    }
+
+    const bubble = group.querySelector(
+        "[data-live-transcript]"
+    );
+
+    if (!bubble) {
+        return;
+    }
+
+    if (isUser) {
+        geminiLiveInputText = mergeLiveTranscriptText(
+            geminiLiveInputText,
+            text
+        );
+
+        bubble.textContent =
+            geminiLiveInputText;
+
+    } else {
+        geminiLiveOutputText = mergeLiveTranscriptText(
+            geminiLiveOutputText,
+            text
+        );
+
+        bubble.textContent =
+            geminiLiveOutputText;
+    }
+
+    scrollConversationToBottom();
+}
+
+
+function clearDirectLiveTurnFinalizeTimer() {
+    if (geminiLiveTurnFinalizeTimer) {
+        window.clearTimeout(
+            geminiLiveTurnFinalizeTimer
+        );
+
+        geminiLiveTurnFinalizeTimer =
+            null;
+    }
+}
+
+
+function commitDirectLiveTurn() {
+    clearDirectLiveTurnFinalizeTimer();
+
+    const inputText =
+        geminiLiveInputText.trim();
+
+    const outputText =
+        geminiLiveOutputText.trim();
+
+    [
+        geminiLiveInputGroup,
+        geminiLiveOutputGroup
+    ].forEach(
+        (group) => {
+            const time =
+                group?.querySelector(
+                    ".message-time"
+                );
+
+            if (time) {
+                time.textContent =
+                    getCurrentTime();
+            }
+        }
+    );
+
+    if (inputText) {
+        conversationHistory.push({
+            role: "user",
+            content: inputText
+        });
+    }
+
+    if (outputText) {
+        conversationHistory.push({
+            role: "assistant",
+            content: outputText
+        });
+    }
+
+    conversationHistory =
+        conversationHistory.slice(
+            -8
+        );
+
+    geminiLiveInputText = "";
+    geminiLiveOutputText = "";
+    geminiLiveInputGroup = null;
+    geminiLiveOutputGroup = null;
+    geminiLiveTurnCompletePending = false;
+
+    voiceModeSpeaking = false;
 
     if (
-        speechRecognition &&
-        speechRecognitionActive
+        voiceModeActive &&
+        !sessionEnded
     ) {
+        updateVoiceModeStatus(
+            "Listening… speak naturally."
+        );
+    }
+}
+
+
+function finishDirectLiveTurn() {
+    geminiLiveTurnCompletePending =
+        true;
+
+    clearDirectLiveTurnFinalizeTimer();
+
+    /*
+        Gemini's transcription messages have no guaranteed ordering relative
+        to turnComplete. Give late input/output transcript chunks a brief
+        window to land in the correct bubble.
+    */
+    geminiLiveTurnFinalizeTimer =
+        window.setTimeout(
+            () => {
+                commitDirectLiveTurn();
+            },
+            550
+        );
+}
+
+
+function stopGeminiLiveOutputAudio() {
+    geminiLiveOutputSources.forEach((source) => {
         try {
-            speechRecognition.stop();
+            source.stop();
         } catch {
-            // The browser may already be stopping recognition.
+            // Already ended.
         }
-    }
+    });
 
-    speechRecognitionActive = false;
-    setMicrophoneState("idle");
-}
+    geminiLiveOutputSources.clear();
 
-
-function createSpeechRecognition() {
-    const Recognition = (
-        getSpeechRecognitionConstructor()
-    );
-
-    if (!Recognition) {
-        return null;
-    }
-
-    const recognition = new Recognition();
-
-    recognition.continuous = false;
-    recognition.interimResults = false;
-    recognition.maxAlternatives = 1;
-    recognition.lang = (
-        getSelectedLanguageOption()
-            .speechRecognition ||
-        navigator.language ||
-        "en-US"
-    );
-
-    recognition.onstart = () => {
-        speechRecognitionActive = true;
-        suppressRecognitionRestart = false;
-
-        setMicrophoneState("listening");
-
-        if (voiceModeActive) {
-            updateVoiceModeStatus(
-                "Listening… speak naturally."
-            );
-        }
-    };
-
-    recognition.onresult = (event) => {
-        const transcript = (
-            event.results?.[0]?.[0]?.transcript ||
-            ""
-        ).trim();
-
-        if (!transcript) {
-            return;
-        }
-
-        registerUserActivity();
-
-        if (
-            recognitionAutoSubmit &&
-            voiceModeActive
-        ) {
-            chatInput.value = "";
-
-            updateVoiceModeStatus(
-                "A.I.D.A. is thinking…"
-            );
-
-            submitMessage(
-                transcript,
-                transcript,
-                {
-                    voiceMode: true,
-                    autoSpeak: true
-                }
-            );
-
-            return;
-        }
-
-        chatInput.value = transcript;
-        chatInput.dispatchEvent(
-            new Event("input")
-        );
-        chatInput.focus();
-    };
-
-    recognition.onerror = (event) => {
-        speechRecognitionActive = false;
-        setMicrophoneState("idle");
-
-        const errorName = event.error || "unknown";
-
-        if (
-            errorName === "no-speech" ||
-            errorName === "aborted"
-        ) {
-            return;
-        }
-
-        if (voiceModeActive) {
-            updateVoiceModeStatus(
-                "Microphone unavailable — tap the mic to try again."
-            );
-        }
-    };
-
-    recognition.onend = () => {
-        speechRecognitionActive = false;
-        setMicrophoneState("idle");
-
-        if (
-            voiceModeActive &&
-            recognitionAutoSubmit &&
-            !waitingForReply &&
-            !voiceModeSpeaking &&
-            !sessionEnded &&
-            !stillTherePromptActive &&
-            !suppressRecognitionRestart
-        ) {
-            window.setTimeout(
-                () => {
-                    startSpeechRecognition(true);
-                },
-                650
-            );
-        }
-    };
-
-    return recognition;
-}
-
-
-function startSpeechRecognition(autoSubmit = false) {
-    if (sessionEnded) {
-        return;
-    }
-
-    if (!speechRecognitionIsSupported()) {
-        addAssistantMessage(
-            "**Microphone not available in this browser.**\n" +
-            "Speech-to-text works best in a browser with Web Speech recognition support, such as current Chrome or Edge."
-        );
-
-        if (voiceModeActive) {
-            deactivateVoiceMode({
-                silent: true
-            });
-        }
-
-        return;
-    }
-
-    if (speechRecognitionActive) {
-        stopSpeechRecognition();
-        return;
-    }
-
-    recognitionAutoSubmit = autoSubmit;
-    suppressRecognitionRestart = false;
-
-    speechRecognition = createSpeechRecognition();
-
-    try {
-        speechRecognition.start();
-    } catch {
-        setMicrophoneState("idle");
+    if (geminiLiveOutputContext) {
+        geminiLiveOutputNextTime =
+            geminiLiveOutputContext.currentTime + 0.025;
     }
 }
 
 
-async function playVoiceModeResponse(messageText) {
-    if (!voiceModeActive || sessionEnded) {
+function scheduleGeminiLiveAudio(base64Audio) {
+    if (!voiceModeActive || !base64Audio) {
         return;
     }
 
-    stopSpeechRecognition();
-    stopActiveSpeech();
+    const bytes = base64ToUint8Array(base64Audio);
+
+    if (!geminiLiveOutputContext) {
+        const AudioContextClass =
+            window.AudioContext ||
+            window.webkitAudioContext;
+
+        if (!AudioContextClass) {
+            return;
+        }
+
+        geminiLiveOutputContext =
+            new AudioContextClass();
+
+        geminiLiveOutputNextTime =
+            geminiLiveOutputContext.currentTime + 0.025;
+    }
+
+    geminiLiveOutputContext.resume().catch(() => {});
 
     voiceModeSpeaking = true;
-    updateVoiceModeStatus(
-        "Preparing A.I.D.A.’s voice…"
+    updateVoiceModeStatus("A.I.D.A. is speaking…");
+
+    const state = {
+        sources: geminiLiveOutputSources,
+        nextTime: geminiLiveOutputNextTime
+    };
+
+    schedulePcmChunk(
+        geminiLiveOutputContext,
+        bytes,
+        state,
+        24000
+    );
+
+    geminiLiveOutputNextTime = state.nextTime;
+}
+
+
+function float32ToPcm16Bytes(
+    samples,
+    inputRate,
+    targetRate = 16000
+) {
+    const ratio = inputRate / targetRate;
+    const outputLength = Math.max(
+        1,
+        Math.round(samples.length / ratio)
+    );
+    const output = new Int16Array(outputLength);
+
+    for (let out = 0; out < outputLength; out += 1) {
+        const start = Math.floor(out * ratio);
+        const end = Math.min(
+            samples.length,
+            Math.floor((out + 1) * ratio)
+        );
+
+        let sum = 0;
+        let count = 0;
+
+        for (let i = start; i < end; i += 1) {
+            sum += samples[i];
+            count += 1;
+        }
+
+        const average = count
+            ? sum / count
+            : (samples[start] || 0);
+
+        const value = Math.max(-1, Math.min(1, average));
+
+        output[out] = value < 0
+            ? value * 0x8000
+            : value * 0x7fff;
+    }
+
+    return new Uint8Array(output.buffer);
+}
+
+
+async function startGeminiLiveMicrophone() {
+    geminiLiveMediaStream =
+        await navigator.mediaDevices.getUserMedia({
+            audio: {
+                echoCancellation: true,
+                noiseSuppression: true,
+                autoGainControl: true,
+                channelCount: 1
+            }
+        });
+
+    const AudioContextClass =
+        window.AudioContext ||
+        window.webkitAudioContext;
+
+    geminiLiveInputContext =
+        new AudioContextClass();
+
+    await geminiLiveInputContext.resume();
+
+    geminiLiveInputSource =
+        geminiLiveInputContext.createMediaStreamSource(
+            geminiLiveMediaStream
+        );
+
+    geminiLiveInputProcessor =
+        geminiLiveInputContext.createScriptProcessor(
+            4096,
+            1,
+            1
+        );
+
+    geminiLiveSilentGain =
+        geminiLiveInputContext.createGain();
+
+    geminiLiveSilentGain.gain.value = 0;
+
+    geminiLiveInputProcessor.onaudioprocess = (event) => {
+        if (
+            !voiceModeActive ||
+            !geminiLiveSetupComplete ||
+            !geminiLiveSocket ||
+            geminiLiveSocket.readyState !== WebSocket.OPEN
+        ) {
+            return;
+        }
+
+        const samples =
+            event.inputBuffer.getChannelData(0);
+
+        const pcm = float32ToPcm16Bytes(
+            samples,
+            geminiLiveInputContext.sampleRate,
+            16000
+        );
+
+        geminiLiveSocket.send(
+            JSON.stringify({
+                realtimeInput: {
+                    audio: {
+                        data: uint8ArrayToBase64(pcm),
+                        mimeType: "audio/pcm;rate=16000"
+                    }
+                }
+            })
+        );
+    };
+
+    geminiLiveInputSource.connect(
+        geminiLiveInputProcessor
+    );
+
+    geminiLiveInputProcessor.connect(
+        geminiLiveSilentGain
+    );
+
+    geminiLiveSilentGain.connect(
+        geminiLiveInputContext.destination
+    );
+}
+
+
+function stopGeminiLiveMicrophone() {
+    try {
+        geminiLiveInputProcessor?.disconnect();
+        geminiLiveInputSource?.disconnect();
+        geminiLiveSilentGain?.disconnect();
+    } catch {
+        // Already disconnected.
+    }
+
+    geminiLiveMediaStream?.getTracks().forEach(
+        (track) => track.stop()
     );
 
     try {
-        const audioUrl = await fetchSpeechAudio(
-            messageText
+        geminiLiveInputContext?.close();
+    } catch {
+        // Already closed.
+    }
+
+    geminiLiveInputProcessor = null;
+    geminiLiveInputSource = null;
+    geminiLiveSilentGain = null;
+    geminiLiveMediaStream = null;
+    geminiLiveInputContext = null;
+}
+
+
+function closeGeminiLiveSocket() {
+    geminiLiveClosing = true;
+
+    if (geminiLiveSetupTimer) {
+        window.clearTimeout(
+            geminiLiveSetupTimer
         );
+        geminiLiveSetupTimer = null;
+    }
 
-        const audio = new Audio(audioUrl);
-        activeAudio = audio;
-
-        audio.addEventListener(
-            "ended",
-            () => {
-                activeAudio = null;
-                voiceModeSpeaking = false;
-
-                if (
-                    voiceModeActive &&
-                    !sessionEnded
-                ) {
-                    updateVoiceModeStatus(
-                        "Listening… speak naturally."
-                    );
-
-                    window.setTimeout(
-                        () => {
-                            startSpeechRecognition(true);
-                        },
-                        450
-                    );
-                }
-            }
-        );
-
-        audio.addEventListener(
-            "error",
-            () => {
-                activeAudio = null;
-                voiceModeSpeaking = false;
-
-                if (voiceModeActive) {
-                    updateVoiceModeStatus(
-                        "Speech playback failed — listening again."
-                    );
-
-                    window.setTimeout(
-                        () => {
-                            startSpeechRecognition(true);
-                        },
-                        700
-                    );
-                }
-            }
-        );
-
-        updateVoiceModeStatus(
-            "A.I.D.A. is speaking…"
-        );
-
-        await audio.play();
-
-    } catch (error) {
-        voiceModeSpeaking = false;
-
-        updateVoiceModeStatus(
-            "Speech could not play — listening again."
-        );
-
-        if (voiceModeActive) {
-            window.setTimeout(
-                () => {
-                    startSpeechRecognition(true);
-                },
-                700
+    if (
+        geminiLiveSocket &&
+        (
+            geminiLiveSocket.readyState === WebSocket.OPEN ||
+            geminiLiveSocket.readyState === WebSocket.CONNECTING
+        )
+    ) {
+        try {
+            geminiLiveSocket.close(
+                1000,
+                "Voice Mode ended"
             );
+        } catch {
+            // Already closing.
+        }
+    }
+
+    geminiLiveSocket = null;
+    geminiLiveSetupComplete = false;
+
+    stopGeminiLiveMicrophone();
+    stopGeminiLiveOutputAudio();
+
+    try {
+        geminiLiveOutputContext?.close();
+    } catch {
+        // Already closed.
+    }
+
+    geminiLiveOutputContext = null;
+    geminiLiveOutputNextTime = 0;
+
+    window.setTimeout(() => {
+        geminiLiveClosing = false;
+    }, 100);
+}
+
+
+function handleGeminiLiveServerMessage(payload) {
+    /*
+        Surface Gemini protocol errors instead of silently ignoring them.
+        This prevents the UI from remaining forever on "configuring".
+    */
+    if (payload?.error) {
+        const message = (
+            payload.error.message ||
+            payload.error.status ||
+            "Gemini Live rejected the session configuration."
+        );
+
+        console.error(
+            "Gemini Live server error:",
+            payload.error
+        );
+
+        if (geminiLiveSetupTimer) {
+            window.clearTimeout(
+                geminiLiveSetupTimer
+            );
+            geminiLiveSetupTimer = null;
+        }
+
+        updateVoiceModeStatus(
+            "Gemini Live setup failed."
+        );
+
+        addAssistantMessage(
+            "**Voice Mode could not finish connecting.**\n" +
+            message,
+            [],
+            {
+                countUnread: false
+            }
+        );
+
+        deactivateVoiceMode({
+            silent: true
+        });
+
+        return;
+    }
+
+    if (payload.setupComplete) {
+        geminiLiveSetupComplete = true;
+
+        if (geminiLiveSetupTimer) {
+            window.clearTimeout(
+                geminiLiveSetupTimer
+            );
+            geminiLiveSetupTimer = null;
+        }
+
+        console.info(
+            "Gemini Live setup complete."
+        );
+
+        updateVoiceModeStatus(
+            "Connected — starting microphone…"
+        );
+
+        startGeminiLiveMicrophone()
+            .then(() => {
+                updateVoiceModeStatus(
+                    "Listening… speak naturally."
+                );
+            })
+            .catch((error) => {
+                addAssistantMessage(
+                    "**Microphone access could not start.**\n" +
+                    (
+                        error.message ||
+                        "Please check microphone permission."
+                    ),
+                    [],
+                    {
+                        countUnread: false
+                    }
+                );
+
+                deactivateVoiceMode({
+                    silent: true
+                });
+            });
+
+        return;
+    }
+
+    const content = payload.serverContent;
+
+    if (!content) {
+        /*
+            Log unexpected setup-stage messages so they are visible in
+            DevTools rather than being silently discarded.
+        */
+        if (!geminiLiveSetupComplete) {
+            console.info(
+                "Gemini Live setup-stage message:",
+                payload
+            );
+        }
+
+        return;
+    }
+
+    if (content.inputTranscription?.text) {
+        registerUserActivity();
+
+        updateDirectLiveTranscript(
+            "user",
+            content.inputTranscription.text
+        );
+    }
+
+    if (content.outputTranscription?.text) {
+        updateDirectLiveTranscript(
+            "assistant",
+            content.outputTranscription.text
+        );
+    }
+
+    (content.modelTurn?.parts || []).forEach((part) => {
+        if (part.inlineData?.data) {
+            scheduleGeminiLiveAudio(
+                part.inlineData.data
+            );
+        }
+    });
+
+    if (content.interrupted) {
+        stopGeminiLiveOutputAudio();
+        voiceModeSpeaking = false;
+        updateVoiceModeStatus(
+            "Listening…"
+        );
+    }
+
+    if (content.turnComplete) {
+        finishDirectLiveTurn();
+
+        /*
+            The normal A.I.D.A. timeout remains disabled while
+            Voice Mode itself is active.
+        */
+        if (!voiceModeActive) {
+            scheduleInactivityWarning();
         }
     }
 }
 
 
-function activateVoiceMode() {
+async function connectGeminiLive() {
+    updateVoiceModeStatus(
+        "Creating short-lived Gemini connection…"
+    );
+
+    /*
+        Do not allow token creation to leave Voice Mode visually stuck.
+        If Flask/Google does not respond quickly, return to normal chat.
+    */
+    const tokenAbortController =
+        new AbortController();
+
+    const tokenTimeout =
+        window.setTimeout(
+            () => {
+                tokenAbortController.abort();
+            },
+            12000
+        );
+
+    let response;
+
+    try {
+        response = await fetch(
+            "/api/voice-live/token",
+            {
+                method: "POST",
+                headers: {
+                    "Content-Type":
+                        "application/json"
+                },
+                body: JSON.stringify({
+                    language:
+                        selectedLanguage ||
+                        "en"
+                }),
+                signal:
+                    tokenAbortController.signal
+            }
+        );
+
+    } catch (error) {
+        window.clearTimeout(
+            tokenTimeout
+        );
+
+        if (
+            error?.name ===
+            "AbortError"
+        ) {
+            throw new Error(
+                "Gemini Live took too long to create the secure connection. Please try Voice Mode again."
+            );
+        }
+
+        throw error;
+    }
+
+    window.clearTimeout(
+        tokenTimeout
+    );
+
+    let payload = {};
+
+    try {
+        payload =
+            await response.json();
+
+    } catch {
+        throw new Error(
+            "A.I.D.A. received an invalid Gemini Live connection response."
+        );
+    }
+
+    if (!response.ok) {
+        throw new Error(
+            payload.error ||
+            "Voice Mode could not create the Gemini Live connection."
+        );
+    }
+
+    if (!payload.token) {
+        throw new Error(
+            "Gemini Live did not return a short-lived token."
+        );
+    }
+
+    updateVoiceModeStatus(
+        "Secure token ready — opening Gemini Live…"
+    );
+
+    /*
+        Google's GenAI SDK currently supports ephemeral-token Live
+        connections through the v1alpha constrained endpoint.
+    */
+    const websocketUrl = (
+        "wss://generativelanguage.googleapis.com/ws/" +
+        "google.ai.generativelanguage.v1alpha.GenerativeService." +
+        "BidiGenerateContentConstrained?access_token=" +
+        encodeURIComponent(
+            payload.token
+        )
+    );
+
+    geminiLiveSocket =
+        new WebSocket(
+            websocketUrl
+        );
+
+    let socketOpened = false;
+
+    const socketOpenTimeout =
+        window.setTimeout(
+            () => {
+                if (
+                    !socketOpened &&
+                    geminiLiveSocket &&
+                    geminiLiveSocket.readyState ===
+                        WebSocket.CONNECTING
+                ) {
+                    try {
+                        geminiLiveSocket.close();
+                    } catch {
+                        // Socket may already be closing.
+                    }
+
+                    if (
+                        voiceModeActive
+                    ) {
+                        updateVoiceModeStatus(
+                            "Gemini Live connection timed out."
+                        );
+                    }
+                }
+            },
+            8000
+        );
+
+    geminiLiveSocket.addEventListener(
+        "open",
+        () => {
+            socketOpened = true;
+
+            window.clearTimeout(
+                socketOpenTimeout
+            );
+
+            console.info(
+                "Gemini Live WebSocket opened."
+            );
+
+            updateVoiceModeStatus(
+                "Connected — configuring A.I.D.A.…"
+            );
+
+            const config =
+                payload.config ||
+                {};
+
+            /*
+                The SDK's v1alpha Live request shape uses generationConfig
+                for voice/output settings. Transcription/system instructions
+                remain direct setup fields.
+            */
+            geminiLiveSocket.send(
+                JSON.stringify({
+                    setup: {
+                        model:
+                            `models/${payload.model}`,
+
+                        generationConfig: {
+                            responseModalities:
+                                config.responseModalities ||
+                                [
+                                    "AUDIO"
+                                ],
+
+                            speechConfig:
+                                config.speechConfig
+                        },
+
+                        inputAudioTranscription:
+                            config.inputAudioTranscription ||
+                            {},
+
+                        outputAudioTranscription:
+                            config.outputAudioTranscription ||
+                            {},
+
+                        systemInstruction:
+                            config.systemInstruction
+                    }
+                })
+            );
+
+
+            /*
+                A successfully opened WebSocket must answer the first
+                configuration with setupComplete. Never leave the visitor
+                stuck indefinitely if that acknowledgement does not arrive.
+            */
+            if (geminiLiveSetupTimer) {
+                window.clearTimeout(
+                    geminiLiveSetupTimer
+                );
+            }
+
+            geminiLiveSetupTimer =
+                window.setTimeout(
+                    () => {
+                        if (
+                            voiceModeActive &&
+                            !geminiLiveSetupComplete
+                        ) {
+                            console.error(
+                                "Gemini Live setup timed out before setupComplete."
+                            );
+
+                            addAssistantMessage(
+                                "**Voice Mode connected to Gemini but the session configuration was not accepted in time.**\n" +
+                                "Voice Mode has been stopped so you can continue using normal A.I.D.A. chat.",
+                                [],
+                                {
+                                    countUnread: false
+                                }
+                            );
+
+                            deactivateVoiceMode({
+                                silent: true
+                            });
+                        }
+                    },
+                    8000
+                );
+        }
+    );
+
+    geminiLiveSocket.addEventListener(
+        "message",
+        async (event) => {
+            try {
+                let jsonText;
+
+                /*
+                    Gemini Live WebSocket responses are not guaranteed
+                    to arrive as JavaScript strings. Chrome may expose
+                    them as Blob objects, and other clients can return
+                    ArrayBuffer data.
+
+                    Decode the payload before JSON.parse, matching
+                    Google's official Gemini Live WebSocket example.
+                */
+                if (
+                    event.data instanceof Blob
+                ) {
+                    jsonText =
+                        await event.data.text();
+
+                } else if (
+                    event.data instanceof ArrayBuffer
+                ) {
+                    jsonText =
+                        new TextDecoder()
+                            .decode(
+                                event.data
+                            );
+
+                } else {
+                    jsonText =
+                        String(
+                            event.data
+                        );
+                }
+
+                const payload =
+                    JSON.parse(
+                        jsonText
+                    );
+
+                handleGeminiLiveServerMessage(
+                    payload
+                );
+
+            } catch (error) {
+                console.error(
+                    "Gemini Live message error",
+                    error,
+                    event.data
+                );
+            }
+        }
+    );
+
+    geminiLiveSocket.addEventListener(
+        "error",
+        (event) => {
+            window.clearTimeout(
+                socketOpenTimeout
+            );
+
+            console.error(
+                "Gemini Live WebSocket error",
+                event
+            );
+
+            if (
+                voiceModeActive
+            ) {
+                updateVoiceModeStatus(
+                    "Gemini Live connection error."
+                );
+            }
+        }
+    );
+
+    geminiLiveSocket.addEventListener(
+        "close",
+        (event) => {
+            window.clearTimeout(
+                socketOpenTimeout
+            );
+
+            geminiLiveSetupComplete =
+                false;
+
+            console.info(
+                "Gemini Live socket closed",
+                {
+                    code:
+                        event.code,
+                    reason:
+                        event.reason ||
+                        "No reason supplied",
+                    clean:
+                        event.wasClean
+                }
+            );
+
+            if (
+                voiceModeActive &&
+                !geminiLiveClosing
+            ) {
+                addAssistantMessage(
+                    (
+                        socketOpened
+                            ? (
+                                "**Gemini Live disconnected.**\n" +
+                                "Voice Mode has ended. Normal A.I.D.A. chat is still available."
+                            )
+                            : (
+                                "**Gemini Live could not open the voice connection.**\n" +
+                                "Please try Voice Mode again. Normal A.I.D.A. chat is still available."
+                            )
+                    ),
+                    [],
+                    {
+                        countUnread:
+                            false
+                    }
+                );
+
+                deactivateVoiceMode({
+                    silent:
+                        true
+                });
+            }
+        }
+    );
+}
+
+
+function showVoiceModePrivacyNotice() {
+    if (voiceModeActive || sessionEnded) {
+        return;
+    }
+
     if (
-        voiceModeActive ||
-        sessionEnded
+        document.getElementById(
+            "voice-mode-consent-card"
+        )
     ) {
+        return;
+    }
+
+    closeHelpDrawer();
+
+    const card = document.createElement("section");
+    card.id = "voice-mode-consent-card";
+    card.className = "voice-mode-consent-card";
+
+    card.innerHTML = `
+        <div class="voice-mode-consent-icon">
+            ${iconSvg("microphone")}
+        </div>
+
+        <div class="voice-mode-consent-copy">
+            <strong>Gemini Live Voice Mode</strong>
+
+            <p>
+                For faster real-time conversation, Voice Mode connects
+                your live microphone audio <b>directly to Google Gemini</b>.
+            </p>
+
+            <p>
+                <b>Do not say sensitive information</b>, including passwords,
+                card or banking details, security/authentication codes,
+                taxpayer identifiers, private account numbers, or other
+                confidential personal information.
+            </p>
+
+            <p>
+                A.I.D.A. will transcribe both sides of the live conversation
+                into this chat as you speak.
+            </p>
+
+            <div class="voice-mode-consent-actions">
+                <button
+                    class="voice-mode-consent-start"
+                    type="button"
+                >
+                    Start Voice Mode
+                </button>
+
+                <button
+                    class="voice-mode-consent-cancel"
+                    type="button"
+                >
+                    Cancel
+                </button>
+            </div>
+        </div>
+    `;
+
+    card.querySelector(
+        ".voice-mode-consent-cancel"
+    ).addEventListener("click", () => {
+        card.remove();
+    });
+
+    card.querySelector(
+        ".voice-mode-consent-start"
+    ).addEventListener("click", async () => {
+        card.remove();
+        await activateVoiceMode();
+    });
+
+    chatMessages.appendChild(card);
+    scrollConversationToBottom(true);
+}
+
+
+async function activateVoiceMode() {
+    if (voiceModeActive || sessionEnded) {
         return;
     }
 
@@ -1734,82 +2580,127 @@ function activateVoiceMode() {
         liveChatState === "active"
     ) {
         addAssistantMessage(
-            "Voice Mode is paused while you are connected to **IRD staff live support**.",
+            "Voice Mode is unavailable while you are connected to **IRD staff live support**.",
             [],
             { countUnread: false }
         );
         return;
     }
 
-    if (!speechRecognitionIsSupported()) {
+    if (!navigator.mediaDevices?.getUserMedia) {
         addAssistantMessage(
-            "**Voice Mode needs microphone speech recognition.**\n" +
-            "Please use a current Chrome or Edge browser for this prototype."
+            "**Voice Mode needs microphone access.**\n" +
+            "Please use a current browser and allow microphone permission.",
+            [],
+            { countUnread: false }
         );
         return;
     }
 
     voiceModeActive = true;
     voiceModeSpeaking = false;
+    geminiLiveClosing = false;
+
+    // Always begin Voice Mode with a clean turn/transcript state.
+    clearDirectLiveTurnFinalizeTimer();
+    geminiLiveTurnCompletePending = false;
+    geminiLiveInputText = "";
+    geminiLiveOutputText = "";
+    geminiLiveInputGroup = null;
+    geminiLiveOutputGroup = null;
+
+    // Gemini Live is an active conversation state.
+    // The normal typed-chat timeout must not run while this is active.
+    clearInactivityTimer();
+    clearDisconnectCountdown();
+    removeTimeoutBanner();
+    stillTherePromptActive = false;
 
     chatWidget.classList.add(
         "voice-mode-active"
     );
 
+    setConversationControlsDisabled(true);
+    closeHelpDrawer();
     buildHelpDrawer();
 
-    addAssistantMessage(
-        "**Voice Mode is on.**\nSpeak naturally. I’ll keep spoken answers shorter, show the text, and listen again after I reply.",
-        [],
-        {
-            countUnread: false
-        }
-    );
-
-    renderVoiceModeBanner(
-        "Listening… speak naturally."
-    );
-
+    renderVoiceModeBanner("Connecting…");
     registerUserActivity();
 
-    window.setTimeout(
-        () => {
-            startSpeechRecognition(true);
-        },
-        450
-    );
+    try {
+        await connectGeminiLive();
+    } catch (error) {
+        addAssistantMessage(
+            "**Voice Mode could not start.**\n" +
+            (
+                error.message ||
+                "Please try again."
+            ),
+            [],
+            { countUnread: false }
+        );
+
+        deactivateVoiceMode({
+            silent: true
+        });
+    }
 }
 
 
-function deactivateVoiceMode(
-    options = {}
-) {
+function deactivateVoiceMode(options = {}) {
     if (!voiceModeActive) {
         return;
+    }
+
+    /*
+        Finalise whatever transcript is currently visible before closing.
+        This restores the old End button behaviour without leaving an active
+        turn hanging in memory.
+    */
+    if (
+        geminiLiveInputText.trim() ||
+        geminiLiveOutputText.trim()
+    ) {
+        commitDirectLiveTurn();
+    } else {
+        clearDirectLiveTurnFinalizeTimer();
+        geminiLiveTurnCompletePending = false;
     }
 
     voiceModeActive = false;
     voiceModeSpeaking = false;
 
-    stopSpeechRecognition();
-    stopActiveSpeech();
+    closeGeminiLiveSocket();
     removeVoiceModeBanner();
 
     chatWidget.classList.remove(
         "voice-mode-active"
     );
 
+    if (!sessionEnded && termsAccepted) {
+        setConversationControlsDisabled(false);
+    }
+
     setMicrophoneState("idle");
     buildHelpDrawer();
 
     if (!options.silent && !sessionEnded) {
         addAssistantMessage(
-            "Voice Mode ended. You can continue by typing or use the microphone for one-time dictation.",
+            "Voice Mode ended. You can continue with normal A.I.D.A. chat, the one-time microphone, forms, or IRD live support.",
             [],
-            {
-                countUnread: false
-            }
+            { countUnread: false }
         );
+    }
+
+    if (
+        !sessionEnded &&
+        termsAccepted &&
+        sessionStarted &&
+        liveChatState !== "queued" &&
+        liveChatState !== "active"
+    ) {
+        clearInactivityTimer();
+        scheduleInactivityWarning();
     }
 }
 
@@ -1820,7 +2711,119 @@ function toggleVoiceMode() {
         return;
     }
 
-    activateVoiceMode();
+    showVoiceModePrivacyNotice();
+}
+
+
+// Ordinary microphone remains one-time speech-to-text outside Voice Mode.
+function stopSpeechRecognition() {
+    suppressRecognitionRestart = true;
+
+    if (speechRecognition && speechRecognitionActive) {
+        try {
+            speechRecognition.stop();
+        } catch {
+            // Already stopping.
+        }
+    }
+
+    speechRecognitionActive = false;
+    setMicrophoneState("idle");
+}
+
+
+function createSpeechRecognition() {
+    const Recognition =
+        getSpeechRecognitionConstructor();
+
+    if (!Recognition) {
+        return null;
+    }
+
+    const recognition = new Recognition();
+
+    recognition.continuous = false;
+    recognition.interimResults = true;
+    recognition.maxAlternatives = 1;
+
+    recognition.lang = (
+        getSelectedLanguageOption().speechRecognition ||
+        navigator.language ||
+        "en-US"
+    );
+
+    recognition.onstart = () => {
+        speechRecognitionActive = true;
+        setMicrophoneState("listening");
+    };
+
+    recognition.onresult = (event) => {
+        let transcript = "";
+
+        for (
+            let index = event.resultIndex;
+            index < event.results.length;
+            index += 1
+        ) {
+            transcript +=
+                event.results[index][0].transcript;
+        }
+
+        transcript = transcript.trim();
+
+        if (!transcript) {
+            return;
+        }
+
+        registerUserActivity();
+
+        chatInput.value = transcript;
+
+        chatInput.dispatchEvent(
+            new Event("input")
+        );
+    };
+
+    recognition.onerror = () => {
+        speechRecognitionActive = false;
+        setMicrophoneState("idle");
+    };
+
+    recognition.onend = () => {
+        speechRecognitionActive = false;
+        setMicrophoneState("idle");
+    };
+
+    return recognition;
+}
+
+
+function startSpeechRecognition(autoSubmit = false) {
+    if (sessionEnded || voiceModeActive) {
+        return;
+    }
+
+    if (!speechRecognitionIsSupported()) {
+        addAssistantMessage(
+            "**Microphone not available in this browser.**\n" +
+            "Speech-to-text works best in current Chrome or Edge."
+        );
+        return;
+    }
+
+    if (speechRecognitionActive) {
+        stopSpeechRecognition();
+        return;
+    }
+
+    recognitionAutoSubmit = autoSubmit;
+    speechRecognition = createSpeechRecognition();
+
+    try {
+        speechRecognition.start();
+    } catch {
+        setMicrophoneState("idle");
+    }
 }
 
 
@@ -2621,7 +3624,41 @@ function resetSpeechButton(button) {
 }
 
 
+function stopStreamingSpeech() {
+    if (!activeStreamingSpeech) {
+        return;
+    }
+
+    activeStreamingSpeech.cancelled = true;
+
+    try {
+        activeStreamingSpeech.abortController.abort();
+    } catch {
+        // Already stopped.
+    }
+
+    activeStreamingSpeech.sources.forEach((source) => {
+        try {
+            source.stop();
+        } catch {
+            // Already ended.
+        }
+    });
+
+    try {
+        activeStreamingSpeech.context.close();
+    } catch {
+        // Already closed.
+    }
+
+    resetSpeechButton(activeStreamingSpeech.button);
+    activeStreamingSpeech = null;
+}
+
+
 function stopActiveSpeech() {
+    stopStreamingSpeech();
+
     if (activeAudio) {
         activeAudio.pause();
         activeAudio.currentTime = 0;
@@ -2640,106 +3677,402 @@ async function fetchSpeechAudio(messageText) {
     }
 
     if (speechRequestCache.has(messageText)) {
-        return speechRequestCache.get(
-            messageText
-        );
+        return speechRequestCache.get(messageText);
     }
 
-    const speechRequest = (
-        async () => {
-            const response = await fetch(
-                "/api/speech",
-                {
-                    method: "POST",
-                    headers: {
-                        "Content-Type":
-                            "application/json"
-                    },
-                    body: JSON.stringify(
-                        {
-                            text: messageText
-                        }
-                    )
-                }
-            );
+    const speechRequest = (async () => {
+        const response = await fetch(
+            "/api/speech",
+            {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json"
+                },
+                body: JSON.stringify({
+                    text: messageText
+                })
+            }
+        );
 
-            if (!response.ok) {
-                let payload = {};
+        if (!response.ok) {
+            let payload = {};
 
-                try {
-                    payload =
-                        await response.json();
-
-                } catch {
-                    // Keep the fallback message below.
-                }
-
-                const error = new Error(
-                    payload.error ||
-                    "Speech is unavailable for this response."
-                );
-
-                error.code =
-                    payload.code ||
-                    "speech_error";
-
-                throw error;
+            try {
+                payload = await response.json();
+            } catch {
+                // Use fallback message.
             }
 
-            const audioBlob =
-                await response.blob();
-
-            const audioUrl =
-                URL.createObjectURL(
-                    audioBlob
-                );
-
-            speechCache.set(
-                messageText,
-                audioUrl
+            throw new Error(
+                payload.error ||
+                "Speech is unavailable for this response."
             );
-
-            return audioUrl;
         }
-    )();
 
-    speechRequestCache.set(
-        messageText,
-        speechRequest
-    );
+        const audioBlob = await response.blob();
+        const audioUrl = URL.createObjectURL(audioBlob);
+
+        speechCache.set(messageText, audioUrl);
+        return audioUrl;
+    })();
+
+    speechRequestCache.set(messageText, speechRequest);
 
     try {
         return await speechRequest;
-
     } finally {
-        speechRequestCache.delete(
-            messageText
-        );
+        speechRequestCache.delete(messageText);
     }
 }
 
 
-function prefetchSpeechAudio(messageText) {
-    if (
-        !messageText ||
-        (
-            speechStatus &&
-            speechStatus.available === false
-        )
-    ) {
-        return null;
+function prefetchSpeechAudio() {
+    // Streaming TTS starts on demand. Avoid spending a second TTS call
+    // on responses that the visitor never asks to hear.
+    return null;
+}
+
+
+function base64ToUint8Array(base64Text) {
+    const binary = atob(base64Text);
+    const bytes = new Uint8Array(binary.length);
+
+    for (let i = 0; i < binary.length; i += 1) {
+        bytes[i] = binary.charCodeAt(i);
     }
 
-    const request = fetchSpeechAudio(
-        messageText
+    return bytes;
+}
+
+
+function uint8ArrayToBase64(bytes) {
+    let binary = "";
+    const chunkSize = 0x8000;
+
+    for (
+        let offset = 0;
+        offset < bytes.length;
+        offset += chunkSize
+    ) {
+        binary += String.fromCharCode(
+            ...bytes.subarray(offset, offset + chunkSize)
+        );
+    }
+
+    return btoa(binary);
+}
+
+
+function pcm16BytesToFloat32(bytes) {
+    const length = bytes.byteLength - (bytes.byteLength % 2);
+    const view = new DataView(
+        bytes.buffer,
+        bytes.byteOffset,
+        length
+    );
+    const samples = new Float32Array(length / 2);
+
+    for (let i = 0; i < samples.length; i += 1) {
+        samples[i] = view.getInt16(i * 2, true) / 32768;
+    }
+
+    return samples;
+}
+
+
+function schedulePcmChunk(
+    context,
+    bytes,
+    state,
+    sampleRate = 24000
+) {
+    if (!bytes?.byteLength || context.state === "closed") {
+        return;
+    }
+
+    const samples = pcm16BytesToFloat32(bytes);
+
+    if (!samples.length) {
+        return;
+    }
+
+    const buffer = context.createBuffer(
+        1,
+        samples.length,
+        sampleRate
     );
 
-    request.catch(() => {
-        // Prefetch is an optimisation only.
-        // The Listen button will show any actual error if the user taps it.
+    buffer.copyToChannel(samples, 0);
+
+    const source = context.createBufferSource();
+    source.buffer = buffer;
+    source.connect(context.destination);
+
+    const earliest = context.currentTime + 0.025;
+    state.nextTime = Math.max(
+        state.nextTime || earliest,
+        earliest
+    );
+
+    source.start(state.nextTime);
+    state.nextTime += buffer.duration;
+
+    state.sources.add(source);
+
+    source.addEventListener("ended", () => {
+        state.sources.delete(source);
+    });
+}
+
+
+function concatenateByteChunks(chunks) {
+    const total = chunks.reduce(
+        (sum, chunk) => sum + chunk.byteLength,
+        0
+    );
+
+    const merged = new Uint8Array(total);
+    let offset = 0;
+
+    chunks.forEach((chunk) => {
+        merged.set(chunk, offset);
+        offset += chunk.byteLength;
     });
 
-    return request;
+    return merged;
+}
+
+
+function pcmBytesToWavBlob(
+    pcmBytes,
+    sampleRate = 24000
+) {
+    const dataSize = pcmBytes.byteLength;
+    const buffer = new ArrayBuffer(44 + dataSize);
+    const view = new DataView(buffer);
+
+    const writeText = (offset, text) => {
+        for (let i = 0; i < text.length; i += 1) {
+            view.setUint8(offset + i, text.charCodeAt(i));
+        }
+    };
+
+    writeText(0, "RIFF");
+    view.setUint32(4, 36 + dataSize, true);
+    writeText(8, "WAVE");
+    writeText(12, "fmt ");
+    view.setUint32(16, 16, true);
+    view.setUint16(20, 1, true);
+    view.setUint16(22, 1, true);
+    view.setUint32(24, sampleRate, true);
+    view.setUint32(28, sampleRate * 2, true);
+    view.setUint16(32, 2, true);
+    view.setUint16(34, 16, true);
+    writeText(36, "data");
+    view.setUint32(40, dataSize, true);
+
+    new Uint8Array(buffer, 44).set(pcmBytes);
+
+    return new Blob([buffer], {
+        type: "audio/wav"
+    });
+}
+
+
+async function playCachedSpeech(
+    messageText,
+    button,
+    statusElement
+) {
+    const audioUrl = speechCache.get(messageText);
+
+    if (!audioUrl) {
+        return false;
+    }
+
+    const audio = new Audio(audioUrl);
+
+    activeAudio = audio;
+    activeSpeechButton = button;
+
+    audio.addEventListener("ended", () => {
+        resetSpeechButton(button);
+        activeAudio = null;
+        activeSpeechButton = null;
+    });
+
+    audio.addEventListener("error", () => {
+        resetSpeechButton(button);
+        statusElement.textContent =
+            "The browser could not play this audio.";
+        activeAudio = null;
+        activeSpeechButton = null;
+    });
+
+    await audio.play();
+
+    button.classList.remove("is-loading");
+    button.classList.add("is-playing");
+
+    button.querySelector(
+        ".speech-button-icon"
+    ).innerHTML = iconSvg("pause");
+
+    button.querySelector(
+        ".speech-button-label"
+    ).textContent = "Pause";
+
+    return true;
+}
+
+
+async function streamSpeechResponse(
+    messageText,
+    button,
+    statusElement
+) {
+    const AudioContextClass =
+        window.AudioContext ||
+        window.webkitAudioContext;
+
+    if (!AudioContextClass) {
+        throw new Error(
+            "Streaming audio is not supported by this browser."
+        );
+    }
+
+    const context = new AudioContextClass();
+    await context.resume();
+
+    const abortController = new AbortController();
+
+    const state = {
+        context,
+        abortController,
+        sources: new Set(),
+        nextTime: context.currentTime + 0.035,
+        cancelled: false,
+        button
+    };
+
+    activeStreamingSpeech = state;
+    activeSpeechButton = button;
+
+    button.classList.add("is-loading");
+    button.querySelector(
+        ".speech-button-label"
+    ).textContent = "Connecting";
+
+    const startedAt = performance.now();
+
+    const response = await fetch(
+        "/api/speech/stream",
+        {
+            method: "POST",
+            headers: {
+                "Content-Type": "application/json"
+            },
+            body: JSON.stringify({
+                text: messageText
+            }),
+            signal: abortController.signal
+        }
+    );
+
+    if (!response.ok) {
+        throw new Error(
+            "Gemini streaming speech could not start."
+        );
+    }
+
+    const reader = response.body?.getReader();
+
+    if (!reader) {
+        throw new Error(
+            "This browser cannot play streamed speech."
+        );
+    }
+
+    const chunks = [];
+    let receivedAudio = false;
+
+    while (true) {
+        const { done, value } = await reader.read();
+
+        if (state.cancelled || done) {
+            break;
+        }
+
+        if (!value?.byteLength) {
+            continue;
+        }
+
+        const chunk = new Uint8Array(value);
+        chunks.push(chunk);
+
+        if (!receivedAudio) {
+            receivedAudio = true;
+
+            button.classList.remove("is-loading");
+            button.classList.add("is-playing");
+
+            button.querySelector(
+                ".speech-button-icon"
+            ).innerHTML = iconSvg("pause");
+
+            button.querySelector(
+                ".speech-button-label"
+            ).textContent = "Pause";
+
+            const seconds =
+                (performance.now() - startedAt) / 1000;
+
+            statusElement.textContent =
+                `Started in ${seconds.toFixed(1)}s`;
+        }
+
+        schedulePcmChunk(
+            context,
+            chunk,
+            state,
+            24000
+        );
+    }
+
+    if (!receivedAudio) {
+        throw new Error(
+            "Gemini returned no playable speech."
+        );
+    }
+
+    if (!state.cancelled && chunks.length) {
+        const pcm = concatenateByteChunks(chunks);
+        const wav = pcmBytesToWavBlob(pcm, 24000);
+        speechCache.set(
+            messageText,
+            URL.createObjectURL(wav)
+        );
+    }
+
+    const remainingMs = Math.max(
+        0,
+        (state.nextTime - context.currentTime) * 1000
+    );
+
+    window.setTimeout(() => {
+        if (activeStreamingSpeech === state) {
+            resetSpeechButton(button);
+
+            try {
+                context.close();
+            } catch {
+                // Already closed.
+            }
+
+            activeStreamingSpeech = null;
+            activeSpeechButton = null;
+        }
+    }, remainingMs + 120);
 }
 
 
@@ -2757,8 +4090,40 @@ async function toggleSpeech(
         statusElement.textContent =
             speechStatus.message ||
             "Speech is not configured.";
-
         return;
+    }
+
+    if (
+        activeStreamingSpeech &&
+        activeStreamingSpeech.button === button
+    ) {
+        const context = activeStreamingSpeech.context;
+
+        if (context.state === "running") {
+            await context.suspend();
+
+            button.querySelector(
+                ".speech-button-icon"
+            ).innerHTML = iconSvg("speaker");
+
+            button.querySelector(
+                ".speech-button-label"
+            ).textContent = "Resume";
+            return;
+        }
+
+        if (context.state === "suspended") {
+            await context.resume();
+
+            button.querySelector(
+                ".speech-button-icon"
+            ).innerHTML = iconSvg("pause");
+
+            button.querySelector(
+                ".speech-button-label"
+            ).textContent = "Pause";
+            return;
+        }
     }
 
     if (
@@ -2767,7 +4132,6 @@ async function toggleSpeech(
         !activeAudio.paused
     ) {
         activeAudio.pause();
-
         button.classList.remove("is-playing");
 
         button.querySelector(
@@ -2777,7 +4141,6 @@ async function toggleSpeech(
         button.querySelector(
             ".speech-button-label"
         ).textContent = "Resume";
-
         return;
     }
 
@@ -2787,7 +4150,6 @@ async function toggleSpeech(
         activeAudio.paused
     ) {
         await activeAudio.play();
-
         button.classList.add("is-playing");
 
         button.querySelector(
@@ -2797,68 +4159,58 @@ async function toggleSpeech(
         button.querySelector(
             ".speech-button-label"
         ).textContent = "Pause";
-
         return;
     }
 
     stopActiveSpeech();
 
-    button.classList.add("is-loading");
-
-    button.querySelector(
-        ".speech-button-label"
-    ).textContent = "Loading";
-
     try {
-        const audioUrl = await fetchSpeechAudio(
-            messageText
+        if (speechCache.has(messageText)) {
+            await playCachedSpeech(
+                messageText,
+                button,
+                statusElement
+            );
+            return;
+        }
+
+        await streamSpeechResponse(
+            messageText,
+            button,
+            statusElement
         );
-
-        const audio = new Audio(audioUrl);
-
-        activeAudio = audio;
-        activeSpeechButton = button;
-
-        audio.addEventListener("ended", () => {
-            resetSpeechButton(button);
-            activeAudio = null;
-            activeSpeechButton = null;
-        });
-
-        audio.addEventListener("error", () => {
-            resetSpeechButton(button);
-
-            statusElement.textContent =
-                "The browser could not play the generated audio.";
-
-            activeAudio = null;
-            activeSpeechButton = null;
-        });
-
-        await audio.play();
-
-        button.classList.remove("is-loading");
-        button.classList.add("is-playing");
-
-        button.querySelector(
-            ".speech-button-icon"
-        ).innerHTML = iconSvg("pause");
-
-        button.querySelector(
-            ".speech-button-label"
-        ).textContent = "Pause";
 
     } catch (error) {
-        resetSpeechButton(button);
+        if (error?.name === "AbortError") {
+            return;
+        }
 
-        statusElement.textContent = (
-            error.message ||
-            "Speech is unavailable."
-        );
+        stopActiveSpeech();
 
-        // Refresh diagnostics after an API error so the next click
-        // can display the server's latest voice-access status.
-        await loadSpeechStatus();
+        // Compatibility fallback to the old complete WAV route.
+        try {
+            button.classList.add("is-loading");
+            button.querySelector(
+                ".speech-button-label"
+            ).textContent = "Fallback";
+
+            const audioUrl =
+                await fetchSpeechAudio(messageText);
+
+            speechCache.set(messageText, audioUrl);
+
+            await playCachedSpeech(
+                messageText,
+                button,
+                statusElement
+            );
+        } catch {
+            resetSpeechButton(button);
+            statusElement.textContent =
+                error.message ||
+                "Speech is unavailable.";
+            await loadSpeechStatus();
+        }
     }
 }
 
@@ -4084,14 +5436,6 @@ async function submitMessage(
             }
         );
 
-        if (
-            options.autoSpeak &&
-            voiceModeActive
-        ) {
-            await playVoiceModeResponse(
-                result.answer
-            );
-        }
 
     } catch (error) {
         removeTypingIndicator();
@@ -4359,6 +5703,12 @@ document.addEventListener(
 // ---------------------------------------------------------
 // Start
 // ---------------------------------------------------------
+
+window.addEventListener("beforeunload", () => {
+    if (voiceModeActive) {
+        closeGeminiLiveSocket();
+    }
+});
 
 buildHelpDrawer();
 setMicrophoneState("idle");

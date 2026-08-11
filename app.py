@@ -21,12 +21,13 @@ import re
 import threading
 import tomllib
 import wave
+import requests
 from collections import OrderedDict
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
 
-from flask import Flask, Response, jsonify, render_template, request, url_for
+from flask import Flask, Response, jsonify, render_template, request, stream_with_context, url_for
 from google import genai
 from google.genai import types
 
@@ -88,6 +89,12 @@ FORMS_CATALOG_FILE = (
     / "forms_catalog.json"
 )
 
+LIVE_DEADLINES_FILE = (
+    APP_FOLDER
+    / "data"
+    / "IRD_Tax_Deadlines.csv"
+)
+
 FILLABLE_FORMS_FOLDER = (
     APP_FOLDER
     / "static"
@@ -117,6 +124,7 @@ MAX_SPEECH_CACHE_ITEMS = 32
 DEFAULT_GEMINI_MODEL = "gemini-3.1-flash-lite"
 DEFAULT_GEMINI_TTS_MODEL = "gemini-3.1-flash-tts-preview"
 DEFAULT_GEMINI_TTS_VOICE = "Kore"
+DEFAULT_GEMINI_LIVE_MODEL = "gemini-3.1-flash-live-preview"
 
 MAX_QUESTION_LENGTH = 1500
 MAX_HISTORY_MESSAGES = 8
@@ -182,6 +190,11 @@ GEMINI_TTS_MODEL = get_secret(
 GEMINI_TTS_VOICE = get_secret(
     "GEMINI_TTS_VOICE",
     DEFAULT_GEMINI_TTS_VOICE,
+)
+
+GEMINI_LIVE_MODEL = get_secret(
+    "GEMINI_LIVE_MODEL",
+    DEFAULT_GEMINI_LIVE_MODEL,
 )
 
 AIDA_SPOKEN_NAME = get_secret(
@@ -504,7 +517,7 @@ def ask_aida(
     language_names = {
         "en": "English",
         "es": "Spanish",
-        "zh": "Simplified Chinese",
+        "fr": "French",
     }
 
     response_language = language_names.get(
@@ -513,10 +526,13 @@ def ask_aida(
     )
 
     language_instruction = f"""
-SELECTED CONVERSATION LANGUAGE:
-- Respond in {response_language}.
-- Keep the selected language for the conversation unless the visitor
-  explicitly asks to change language.
+SELECTED CONVERSATION LANGUAGE — LOCKED:
+- Respond only in {response_language} for this chat session.
+- Do not switch the conversation to another language during the session.
+- If the visitor speaks or types another language, continue answering in
+  {response_language}.
+- The language changes only when the visitor ends/restarts the chat and
+  chooses a different onboarding language.
 - Official form names may remain in their official English title when
   translating them would make the form harder to identify.
 """
@@ -903,28 +919,10 @@ def extract_gemini_audio(response: Any) -> bytes | None:
     return None
 
 
-def create_speech_audio(
-    text: str,
-) -> tuple[bytes, str]:
-    """Generate a WAV response using Gemini's native TTS model."""
+def build_aida_voice_prompt(transcript: str) -> str:
+    """Shared A.I.D.A. voice direction for normal streaming TTS."""
 
-    if not GEMINI_API_KEY:
-        raise RuntimeError(
-            "speech_not_configured:GEMINI_API_KEY is missing."
-        )
-
-    speech_text = prepare_text_for_speech(text)
-
-    if not speech_text:
-        raise ValueError(
-            "There is no readable text to speak."
-        )
-
-    client = genai.Client(
-        api_key=GEMINI_API_KEY
-    )
-
-    tts_prompt = f"""
+    return f"""
 VOICE STYLE
 
 Professional Anguillan customer-service assistant.
@@ -936,106 +934,456 @@ The voice should sound like a friendly, knowledgeable Anguillan woman
 assisting members of the public through the Inland Revenue Department.
 She should sound warm, calm, confident, approachable, and professional.
 
-Use the natural rhythm, melody, pronunciation, and conversational pacing
-commonly heard in Anguilla. The Anguillan character should be noticeable,
-but subtle and authentic rather than exaggerated.
+Use natural Anguillan rhythm, melody, pronunciation and conversational
+pacing. Keep the Anguillan character noticeable but subtle and authentic.
 
 Avoid sounding Jamaican, Trinidadian, Bajan, American, British, or like
-a generic Caribbean accent. Do not use an exaggerated island or
-tourist-style voice.
+a generic Caribbean accent. Do not use an exaggerated island or tourist
+voice.
 
 Use clear Standard English suitable for government and financial
-information, while allowing a natural Anguillan cadence and intonation
-to come through.
+information while allowing natural Anguillan cadence and intonation.
 
-Speak at a moderate pace. Important information such as dates, dollar
-amounts, tax types, deadlines, reference numbers, and instructions
-should be pronounced especially clearly.
+Speak at a moderate pace. Pronounce dates, money, tax types, deadlines,
+reference numbers and instructions especially clearly.
 
 PERSONALITY
-
 - Friendly and welcoming
 - Patient and reassuring
 - Knowledgeable without sounding overly formal
-- Professional enough for a government department
+- Government-professional
 - Conversational rather than robotic
-- Locally Anguillan without relying heavily on dialect or slang
-
-DELIVERY
-
-When greeting someone, sound genuinely welcoming.
-
-When explaining a process, slow down slightly and make each step easy
-to follow.
-
-When discussing compliance, payments, penalties, or deadlines, remain
-respectful and neutral rather than stern.
-
-The overall impression should be:
-"a helpful Anguillan IRD officer who knows the system and is happy to
-guide you."
+- Locally Anguillan without heavy slang
 
 PRONUNCIATION
-
 Pronounce A.I.D.A. as {AIDA_SPOKEN_NAME}.
 Pronounce Anguilla as {ANGUILLA_SPOKEN_NAME}.
 
 OUTPUT RULE
-
-Read only the transcript below.
-Do not read any of these voice directions aloud.
-Do not announce section headings such as "VOICE STYLE", "PERSONALITY",
-"DELIVERY", "PRONUNCIATION", or "OUTPUT RULE".
+Read only the transcript below. Never read these directions aloud.
 
 TRANSCRIPT:
-{speech_text}
+{transcript}
 """
 
+
+def create_speech_audio(text: str) -> tuple[bytes, str]:
+    """Generate a complete WAV response as the compatibility fallback."""
+
+    if not GEMINI_API_KEY:
+        raise RuntimeError(
+            "speech_not_configured:GEMINI_API_KEY is missing."
+        )
+
+    speech_text = prepare_text_for_speech(text)
+
+    if not speech_text:
+        raise ValueError("There is no readable text to speak.")
+
+    client = genai.Client(api_key=GEMINI_API_KEY)
+    prompt = build_aida_voice_prompt(speech_text)
     last_error: Exception | None = None
 
-    # Gemini's TTS preview can very occasionally return no audio.
-    # Retry once before reporting a failure to the visitor.
     for _ in range(2):
         try:
             response = client.models.generate_content(
                 model=GEMINI_TTS_MODEL,
-                contents=tts_prompt,
+                contents=prompt,
                 config=types.GenerateContentConfig(
                     response_modalities=["AUDIO"],
                     speech_config=types.SpeechConfig(
                         voice_config=types.VoiceConfig(
-                            prebuilt_voice_config=(
-                                types.PrebuiltVoiceConfig(
-                                    voice_name=GEMINI_TTS_VOICE,
-                                )
+                            prebuilt_voice_config=types.PrebuiltVoiceConfig(
+                                voice_name=GEMINI_TTS_VOICE,
                             )
                         )
                     ),
                 ),
             )
 
-            pcm_audio = extract_gemini_audio(
-                response
-            )
+            pcm_audio = extract_gemini_audio(response)
 
             if pcm_audio:
-                return (
-                    pcm_to_wav(pcm_audio),
-                    GEMINI_TTS_VOICE,
-                )
+                return pcm_to_wav(pcm_audio), GEMINI_TTS_VOICE
 
         except Exception as error:
             last_error = error
 
     if last_error:
-        app.logger.error(
-            "Gemini TTS failed: %s",
-            last_error,
-        )
+        app.logger.error("Gemini TTS failed: %s", last_error)
 
     raise RuntimeError(
         "speech_service_error:Gemini did not return playable audio."
     )
+
+
+def iter_speech_pcm(text: str):
+    """Yield raw 24 kHz PCM chunks from Gemini 3.1 streaming TTS."""
+
+    if not GEMINI_API_KEY:
+        raise RuntimeError(
+            "speech_not_configured:GEMINI_API_KEY is missing."
+        )
+
+    speech_text = prepare_text_for_speech(text)
+
+    if not speech_text:
+        raise ValueError("There is no readable text to speak.")
+
+    client = genai.Client(api_key=GEMINI_API_KEY)
+
+    stream = client.models.generate_content_stream(
+        model=GEMINI_TTS_MODEL,
+        contents=build_aida_voice_prompt(speech_text),
+        config=types.GenerateContentConfig(
+            response_modalities=["AUDIO"],
+            speech_config=types.SpeechConfig(
+                voice_config=types.VoiceConfig(
+                    prebuilt_voice_config=types.PrebuiltVoiceConfig(
+                        voice_name=GEMINI_TTS_VOICE,
+                    )
+                )
+            ),
+        ),
+    )
+
+    for chunk in stream:
+        pcm_audio = extract_gemini_audio(chunk)
+        if pcm_audio:
+            yield pcm_audio
+
+
+def build_live_voice_instruction(language: str) -> str:
+    """
+    Build A.I.D.A.'s Gemini Live persona and current IRD context.
+
+    The files are re-read whenever a new Voice Mode session starts so
+    staff/admin content changes are reflected without editing JavaScript.
+
+    Authority order:
+    1. Master prompt safety/behaviour rules.
+    2. Verified primary IRD knowledge base.
+    3. Verified web/forms knowledge additions.
+    4. Staff deadline radar only as secondary operational context.
+
+    The deadline radar must never override a conflicting verified KB fact.
+    """
+
+    language_names = {
+        "en": "English",
+        "es": "Spanish",
+        "fr": "French",
+    }
+
+    language_name = language_names.get(
+        language,
+        "English",
+    )
+
+    # Re-read the currently managed files for every new Live session.
+    # Safe fallbacks preserve Voice Mode if an optional file is absent.
+    try:
+        current_master_prompt = read_required_text(
+            MASTER_PROMPT_FILE
+        )
+    except (OSError, FileNotFoundError):
+        current_master_prompt = MASTER_PROMPT
+
+    try:
+        current_primary_kb = read_required_text(
+            PRIMARY_KNOWLEDGE_FILE
+        )
+    except (OSError, FileNotFoundError):
+        current_primary_kb = PRIMARY_KNOWLEDGE_BASE
+
+    current_web_addendum = read_optional_text(
+        MASTER_PROMPT_WEB_ADDENDUM_FILE
+    )
+
+    current_web_knowledge = read_optional_text(
+        WEB_KNOWLEDGE_ADDITIONS_FILE
+    )
+
+    current_deadlines = read_optional_text(
+        LIVE_DEADLINES_FILE
+    )
+
+    if not current_deadlines.strip():
+        current_deadlines = (
+            "No staff deadline-radar rows are currently available."
+        )
+
+    return f"""
+A.I.D.A. GEMINI LIVE VOICE MODE
+
+IDENTITY
+
+You are A.I.D.A., the Anguilla Inland Revenue Department customer-service
+assistant.
+
+LANGUAGE LOCK
+
+RESPOND ONLY IN {language_name.upper()} FOR THIS ENTIRE LIVE VOICE SESSION.
+
+Do not switch to another language during the Live session, even if the visitor
+uses words from another language. Continue the conversation in
+{language_name.upper()}.
+
+The language can change only after Voice Mode is ended and the visitor starts
+a new chat/session using a different onboarding language.
+
+VOICE STYLE — MATCH THE NORMAL A.I.D.A. LISTEN VOICE
+
+Professional Anguillan customer-service assistant.
+
+Speak with a natural Anguillan English accent from Anguilla in the Eastern
+Caribbean.
+
+The voice should sound like a friendly, knowledgeable Anguillan woman
+assisting members of the public through the Inland Revenue Department.
+She should sound warm, calm, confident, approachable, and professional.
+
+Use the natural rhythm, melody, pronunciation, and conversational pacing
+commonly heard in Anguilla. The Anguillan character should be noticeable,
+but subtle and authentic rather than exaggerated.
+
+Avoid sounding Jamaican, Trinidadian, Bajan, American, British, or like a
+generic Caribbean accent. Do not use an exaggerated island or tourist-style
+voice.
+
+Use clear Standard English suitable for government and financial information,
+while allowing a natural Anguillan cadence and intonation to come through.
+
+Speak at a moderate pace. Important information such as dates, dollar amounts,
+tax types, deadlines, reference numbers, and instructions should be pronounced
+especially clearly.
+
+PERSONALITY
+
+- Friendly and welcoming.
+- Patient and reassuring.
+- Knowledgeable without sounding overly formal.
+- Professional enough for a government department.
+- Conversational rather than robotic.
+- Locally Anguillan without relying heavily on dialect or slang.
+
+DELIVERY
+
+- When greeting someone, sound genuinely welcoming.
+- When explaining a process, slow down slightly and make each step easy to
+  follow.
+- When discussing compliance, payments, penalties, or deadlines, remain
+  respectful and neutral rather than stern.
+- Keep most Live answers concise: usually 1 to 4 short spoken sentences.
+- Give the direct answer first.
+- Do not read Markdown symbols, CSV syntax, source filenames, or implementation
+  details aloud.
+
+PRONUNCIATION
+
+Pronounce A.I.D.A. naturally as {AIDA_SPOKEN_NAME}.
+Pronounce Anguilla naturally as {ANGUILLA_SPOKEN_NAME}.
+
+The overall impression should be:
+"a helpful Anguillan IRD officer who knows the system and is happy to guide
+you."
+
+============================================================
+AUTHORITY AND ACCURACY RULES
+============================================================
+
+The material below is the context supplied by the IRD chatbot project.
+
+Use this strict authority order:
+
+1. MASTER POLICY AND SAFETY RULES
+2. VERIFIED PRIMARY IRD KNOWLEDGE BASE
+3. VERIFIED WEB/FORMS KNOWLEDGE ADDITIONS
+4. STAFF DEADLINE RADAR — SECONDARY ONLY
+
+If two sources conflict:
+- Prefer the VERIFIED PRIMARY IRD KNOWLEDGE BASE.
+- Never let the staff deadline radar override a verified KB fact.
+- If a deadline still cannot be verified confidently, do not guess.
+- Tell the visitor that the date should be verified in normal A.I.D.A. chat
+  or with IRD staff.
+
+Never tell the visitor about these source filenames or internal authority
+labels.
+
+For a form:
+- Explain which form is relevant.
+- Tell the visitor that normal typed A.I.D.A. chat can display the verified
+  official/fillable form buttons.
+- Never invent a form link.
+
+For account-specific assistance:
+- Do not ask for private taxpayer information in Voice Mode.
+- Tell the visitor to end Voice Mode and use IRD live support.
+
+============================================================
+MASTER POLICY AND SAFETY RULES
+============================================================
+
+{current_master_prompt}
+
+============================================================
+WEBSITE BEHAVIOUR ADDENDUM
+============================================================
+
+{current_web_addendum}
+
+============================================================
+VERIFIED PRIMARY IRD KNOWLEDGE BASE
+============================================================
+
+The CSV content below is reference knowledge.
+Use the answer and review-status fields to ground IRD-specific facts.
+Do not read CSV formatting aloud.
+
+{current_primary_kb}
+
+============================================================
+WEB / FORMS KNOWLEDGE ADDITIONS
+============================================================
+
+{current_web_knowledge}
+
+============================================================
+STAFF DEADLINE RADAR — SECONDARY / NON-OVERRIDING
+============================================================
+
+These rows are staff-managed operational context.
+
+IMPORTANT:
+- They are NOT allowed to override a conflicting fact in the verified primary
+  knowledge base.
+- If a row conflicts with verified knowledge, ignore the conflicting radar
+  date/details.
+- If its accuracy cannot be established from the verified context, say that
+  you cannot confidently verify the deadline rather than repeating it as fact.
+
+{current_deadlines}
+
+============================================================
+LIVE RESPONSE RULE
+============================================================
+
+Answer naturally as A.I.D.A. using the context above.
+
+For simple questions, keep the spoken answer short.
+For processes, give clear ordered steps.
+For dates, fees, rates, penalties, forms, or requirements, only state them
+when supported by the verified context.
+Never guess.
+"""
+
+
+def create_live_ephemeral_token(language: str) -> dict[str, Any]:
+    """
+    Create a short-lived Gemini Live token using Google's GenAI SDK.
+
+    Ephemeral-token Live sessions currently use the v1alpha API path.
+    The permanent GEMINI_API_KEY remains on Flask and is never returned
+    to the browser.
+    """
+
+    if not GEMINI_API_KEY:
+        raise RuntimeError(
+            "GEMINI_API_KEY is not configured."
+        )
+
+    now = datetime.now(
+        timezone.utc
+    )
+
+    live_instruction = (
+        build_live_voice_instruction(
+            language
+        )
+    )
+
+    live_config = {
+        "responseModalities": [
+            "AUDIO"
+        ],
+        "speechConfig": {
+            "voiceConfig": {
+                "prebuiltVoiceConfig": {
+                    "voiceName":
+                        GEMINI_TTS_VOICE
+                }
+            }
+        },
+        "inputAudioTranscription": {},
+        "outputAudioTranscription": {},
+        "systemInstruction": {
+            "parts": [
+                {
+                    "text":
+                        live_instruction
+                }
+            ]
+        },
+    }
+
+    # Use the SDK's ephemeral-token implementation instead of manually
+    # constructing the REST request. Google currently documents v1alpha
+    # for ephemeral-token Live sessions.
+    client = genai.Client(
+        api_key=GEMINI_API_KEY,
+        http_options={
+            "api_version":
+                "v1alpha"
+        },
+    )
+
+    token = client.auth_tokens.create(
+        config={
+            "uses": 1,
+            "expire_time": (
+                now +
+                timedelta(
+                    minutes=30
+                )
+            ),
+            "new_session_expire_time": (
+                now +
+                timedelta(
+                    minutes=1
+                )
+            ),
+            "http_options": {
+                "api_version":
+                    "v1alpha"
+            },
+        }
+    )
+
+    token_name = str(
+        getattr(
+            token,
+            "name",
+            "",
+        )
+        or ""
+    ).strip()
+
+    if not token_name:
+        raise RuntimeError(
+            "Gemini did not return an ephemeral Live token."
+        )
+
+    return {
+        "token":
+            token_name,
+        "model":
+            GEMINI_LIVE_MODEL,
+        "config":
+            live_config,
+        "api_version":
+            "v1alpha",
+    }
 
 
 def friendly_speech_error(error_code: str) -> str:
@@ -1233,7 +1581,7 @@ def chat():
     if language not in {
         "en",
         "es",
-        "zh",
+        "fr",
     }:
         language = "en"
 
@@ -1458,6 +1806,161 @@ def survey():
             "saved": True,
         }
     )
+
+
+@app.post("/api/speech/stream")
+def speech_stream():
+    """
+    Stream 16-bit little-endian mono PCM at 24 kHz.
+
+    Request the first Gemini chunk before Flask commits HTTP 200 so quota
+    errors can return a real 429 response to the browser.
+    """
+
+    payload = request.get_json(silent=True) or {}
+    text = payload.get("text", "")
+
+    if not isinstance(text, str) or not text.strip():
+        return jsonify({
+            "error": "There is no response text to speak.",
+            "code": "invalid_request",
+        }), 400
+
+    try:
+        pcm_iterator = iter(iter_speech_pcm(text.strip()))
+        first_chunk = next(pcm_iterator)
+
+    except StopIteration:
+        return jsonify({
+            "error": "Gemini returned no playable speech.",
+            "code": "speech_empty",
+        }), 502
+
+    except Exception as error:
+        error_text = str(error)
+        status_code = getattr(error, "status_code", None)
+
+        is_quota_error = (
+            status_code == 429
+            or "429 RESOURCE_EXHAUSTED" in error_text
+            or "RESOURCE_EXHAUSTED" in error_text
+        )
+
+        if is_quota_error:
+            retry_after_seconds = None
+
+            retry_match = re.search(
+                r"retry in\s+([0-9]+(?:\.[0-9]+)?)s",
+                error_text,
+                flags=re.IGNORECASE,
+            )
+
+            if retry_match:
+                try:
+                    retry_after_seconds = max(
+                        1,
+                        int(float(retry_match.group(1))),
+                    )
+                except (TypeError, ValueError):
+                    retry_after_seconds = None
+
+            app.logger.warning(
+                "Gemini TTS quota exhausted%s.",
+                (
+                    f"; retry in about {retry_after_seconds}s"
+                    if retry_after_seconds
+                    else ""
+                ),
+            )
+
+            response = jsonify({
+                "error": (
+                    "The enhanced A.I.D.A. voice has reached its current "
+                    "Gemini TTS usage limit."
+                ),
+                "code": "tts_quota_exhausted",
+                "retry_after_seconds": retry_after_seconds,
+            })
+
+            if retry_after_seconds:
+                response.headers["Retry-After"] = str(
+                    retry_after_seconds
+                )
+
+            return response, 429
+
+        app.logger.exception(
+            "Streaming Gemini TTS could not start: %s",
+            error,
+        )
+
+        return jsonify({
+            "error": (
+                "The enhanced A.I.D.A. voice is temporarily unavailable."
+            ),
+            "code": "tts_service_error",
+        }), 503
+
+    def generate():
+        yield first_chunk
+
+        try:
+            yield from pcm_iterator
+        except Exception as error:
+            app.logger.exception(
+                "Streaming Gemini TTS ended early: %s",
+                error,
+            )
+
+    return Response(
+        stream_with_context(generate()),
+        mimetype="application/octet-stream",
+        headers={
+            "Cache-Control": "no-store",
+            "X-AIDA-Audio-Format": "pcm_s16le",
+            "X-AIDA-Sample-Rate": "24000",
+            "X-AIDA-Channels": "1",
+            "X-AIDA-Voice": GEMINI_TTS_VOICE,
+        },
+    )
+
+
+@app.post("/api/voice-live/token")
+def voice_live_token():
+    """Issue an ephemeral token for direct Gemini Live Voice Mode."""
+
+    payload = request.get_json(silent=True) or {}
+    language = str(payload.get("language", "en")).strip().lower()
+
+    if language not in {"en", "es", "fr"}:
+        language = "en"
+
+    try:
+        token_data = create_live_ephemeral_token(language)
+
+    except requests.RequestException as error:
+        app.logger.error("Gemini Live token request failed: %s", error)
+        return jsonify({
+            "error": (
+                "A.I.D.A. could not create the Gemini Live connection."
+            )
+        }), 503
+
+    except Exception as error:
+        app.logger.exception("Gemini Live setup failed: %s", error)
+        return jsonify({
+            "error": "A.I.D.A. could not start Voice Mode."
+        }), 503
+
+    return jsonify({
+        **token_data,
+        "privacy_notice": (
+            "Voice Mode sends live microphone audio directly to Google "
+            "Gemini. Do not share passwords, banking/card details, "
+            "security/authentication codes, taxpayer identifiers, "
+            "private account numbers or other sensitive information."
+        ),
+    })
 
 
 @app.post("/api/speech")

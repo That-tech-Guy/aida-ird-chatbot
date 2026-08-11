@@ -3662,3 +3662,150 @@ body.aida-session-ended
 .chat-widget.session-ended #chat-close-button {
     display: grid !important;
 }
+
+
+/* =====================================================================
+   V7.2 — DIRECT GEMINI LIVE VOICE + STREAMING LISTEN
+===================================================================== */
+
+.voice-mode-consent-card {
+    display: flex;
+    margin: 14px 16px 18px;
+    padding: 15px;
+    gap: 12px;
+
+    color: #2f4037;
+    background:
+        linear-gradient(145deg, #f4fbf7, #fff9f2);
+
+    border: 1px solid #cfe2d7;
+    border-radius: 15px;
+
+    box-shadow:
+        0 8px 22px rgba(0, 73, 45, 0.09);
+}
+
+.voice-mode-consent-icon {
+    display: grid;
+    width: 38px;
+    height: 38px;
+    flex: 0 0 38px;
+    place-items: center;
+
+    color: #ffffff;
+    background:
+        linear-gradient(145deg, #008957, #00663f);
+
+    border-radius: 50%;
+}
+
+.voice-mode-consent-icon svg {
+    width: 20px;
+    height: 20px;
+}
+
+.voice-mode-consent-copy strong {
+    color: #075e3a;
+    font-size: 0.9rem;
+}
+
+.voice-mode-consent-copy p {
+    margin: 7px 0 0;
+    font-size: 0.74rem;
+    line-height: 1.48;
+}
+
+.voice-mode-consent-actions {
+    display: flex;
+    margin-top: 12px;
+    flex-wrap: wrap;
+    gap: 8px;
+}
+
+.voice-mode-consent-start,
+.voice-mode-consent-cancel {
+    min-height: 36px;
+    padding: 7px 12px;
+    border-radius: 9px;
+    font-size: 0.72rem;
+    font-weight: 850;
+}
+
+.voice-mode-consent-start {
+    color: #ffffff;
+    background: #00794c;
+    border: 1px solid #00794c;
+}
+
+.voice-mode-consent-cancel {
+    color: #52685d;
+    background: #ffffff;
+    border: 1px solid #cbdad2;
+}
+
+.voice-mode-banner.direct-live
+.voice-mode-copy small {
+    display: block;
+    margin-top: 2px;
+    color: #82562e;
+    font-size: 0.58rem;
+    font-weight: 700;
+    line-height: 1.25;
+}
+
+/* The direct voice connection owns the interaction until End is pressed. */
+.chat-widget.voice-mode-active
+.chat-footer {
+    opacity: 0.38;
+    filter: grayscale(0.25);
+    pointer-events: none;
+    user-select: none;
+}
+
+.chat-widget.voice-mode-active
+.help-drawer {
+    display: none !important;
+}
+
+.voice-live-transcript
+.message-time {
+    opacity: 0.72;
+}
+
+.voice-live-transcript
+.message::after {
+    display: inline-block;
+    margin-left: 6px;
+    color: #008957;
+    content: "●";
+    font-size: 0.52rem;
+    vertical-align: middle;
+    animation:
+        liveTranscriptPulse
+        1.2s
+        ease-in-out
+        infinite;
+}
+
+@keyframes liveTranscriptPulse {
+    0%,
+    100% {
+        opacity: 0.28;
+    }
+
+    50% {
+        opacity: 1;
+    }
+}
+
+.speech-status:not(:empty) {
+    margin-left: 5px;
+    color: #64766d;
+    font-size: 0.58rem;
+}
+
+@media (max-width: 560px) {
+    .voice-mode-consent-card {
+        margin: 12px 10px 15px;
+    }
+}
