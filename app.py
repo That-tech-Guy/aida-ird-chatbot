@@ -18,9 +18,12 @@ import io
 import json
 import os
 import re
+import smtplib
+import ssl
 import threading
 import tomllib
 import wave
+from email.message import EmailMessage
 import requests
 from collections import OrderedDict
 from datetime import datetime, timedelta, timezone
@@ -216,6 +219,20 @@ FLASK_SECRET_KEY = get_secret(
     "FLASK_SECRET_KEY",
     "",
 )
+
+# Optional SMTP settings for the end-of-chat transcript email feature.
+# Keep these values in .streamlit/secrets.toml or environment variables.
+SMTP_HOST = get_secret("SMTP_HOST", "")
+SMTP_PORT = get_secret("SMTP_PORT", "587")
+SMTP_USERNAME = get_secret("SMTP_USERNAME", "")
+SMTP_PASSWORD = get_secret("SMTP_PASSWORD", "")
+SMTP_FROM_EMAIL = get_secret("SMTP_FROM_EMAIL", SMTP_USERNAME)
+SMTP_USE_SSL = get_secret("SMTP_USE_SSL", "false").lower() in {
+    "1", "true", "yes", "on"
+}
+SMTP_USE_TLS = get_secret("SMTP_USE_TLS", "true").lower() in {
+    "1", "true", "yes", "on"
+}
 
 # Staff access is configured through local secrets or Render environment
 # variables. Never hard-code the admin password in the repository.
@@ -1917,6 +1934,357 @@ def survey():
             "saved": True,
         }
     )
+
+
+# ---------------------------------------------------------
+# End-of-chat transcript email
+# ---------------------------------------------------------
+
+TRANSCRIPT_EMAIL_PATTERN = re.compile(
+    r"^[^\s@]+@[^\s@]+\.[^\s@]+$"
+)
+MAX_TRANSCRIPT_MESSAGES = 200
+MAX_TRANSCRIPT_MESSAGE_LENGTH = 5000
+
+
+def build_chat_transcript(raw_messages: Any) -> str:
+    """Create a plain-text copy of the retained browser chat."""
+
+    if not isinstance(raw_messages, list):
+        return ""
+
+    transcript_lines: list[str] = []
+
+    for item in raw_messages[:MAX_TRANSCRIPT_MESSAGES]:
+        if not isinstance(item, dict):
+            continue
+
+        role = item.get("role")
+        content = item.get("content")
+
+        if role not in {"user", "assistant"}:
+            continue
+
+        if not isinstance(content, str):
+            continue
+
+        content = content.strip()[:MAX_TRANSCRIPT_MESSAGE_LENGTH]
+
+        if not content:
+            continue
+
+        speaker = "You" if role == "user" else "A.I.D.A."
+        transcript_lines.append(f"{speaker}: {content}")
+
+    return "\n\n".join(transcript_lines)
+
+
+def resolve_transcript_smtp_settings():
+    """Return SMTP settings, with safe presets for common providers."""
+
+    username = SMTP_USERNAME.strip()
+    from_email = SMTP_FROM_EMAIL.strip()
+    host = SMTP_HOST.strip()
+
+    # If the host was not supplied, infer a common SMTP server from the
+    # configured sender account. This keeps the feature easy to configure
+    # while still requiring the sender's own secure credentials.
+    sender_for_detection = (username or from_email).lower()
+    inferred_port = SMTP_PORT
+    inferred_ssl = SMTP_USE_SSL
+    inferred_tls = SMTP_USE_TLS
+
+    if not host and "@" in sender_for_detection:
+        domain = sender_for_detection.rsplit("@", 1)[1]
+
+        if domain in {"gmail.com", "googlemail.com"}:
+            host = "smtp.gmail.com"
+            inferred_port = "587"
+            inferred_ssl = False
+            inferred_tls = True
+        elif domain in {
+            "outlook.com", "hotmail.com", "live.com", "msn.com"
+        }:
+            host = "smtp-mail.outlook.com"
+            inferred_port = "587"
+            inferred_ssl = False
+            inferred_tls = True
+        elif domain in {"yahoo.com", "ymail.com"}:
+            host = "smtp.mail.yahoo.com"
+            inferred_port = "465"
+            inferred_ssl = True
+            inferred_tls = False
+
+    if not from_email:
+        from_email = username
+
+    missing = []
+    if not host:
+        missing.append("SMTP_HOST")
+    if not username:
+        missing.append("SMTP_USERNAME")
+    if not SMTP_PASSWORD:
+        missing.append("SMTP_PASSWORD")
+    if not from_email:
+        missing.append("SMTP_FROM_EMAIL")
+
+    if missing:
+        raise RuntimeError(
+            "Email sending is not configured yet. Missing server setting(s): "
+            + ", ".join(missing)
+            + ". Add the sender email settings, restart app.py, and try again."
+        )
+
+    try:
+        port = int(inferred_port)
+    except (TypeError, ValueError) as error:
+        raise RuntimeError("SMTP_PORT must be a valid number.") from error
+
+    return host, port, username, SMTP_PASSWORD, from_email, inferred_ssl, inferred_tls
+
+
+def send_chat_transcript_email(recipient: str, transcript: str) -> None:
+    """Send a chat transcript using server-side SMTP credentials."""
+
+    (
+        smtp_host,
+        smtp_port,
+        smtp_username,
+        smtp_password,
+        smtp_from_email,
+        smtp_use_ssl,
+        smtp_use_tls,
+    ) = resolve_transcript_smtp_settings()
+
+    message = EmailMessage()
+    message["Subject"] = "Your A.I.D.A. chat transcript"
+    message["From"] = smtp_from_email
+    message["To"] = recipient
+    message.set_content(
+        "Thank you for using A.I.D.A.\n\n"
+        "Here is the copy of your chat that you requested.\n\n"
+        f"{transcript}\n\n"
+        "This message was generated at the end of your A.I.D.A. chat session."
+    )
+
+    context = ssl.create_default_context()
+
+    try:
+        if smtp_use_ssl:
+            with smtplib.SMTP_SSL(
+                smtp_host,
+                smtp_port,
+                context=context,
+                timeout=20,
+            ) as smtp:
+                smtp.login(smtp_username, smtp_password)
+                smtp.send_message(message)
+            return
+
+        with smtplib.SMTP(
+            smtp_host,
+            smtp_port,
+            timeout=20,
+        ) as smtp:
+            smtp.ehlo()
+
+            if smtp_use_tls:
+                smtp.starttls(context=context)
+                smtp.ehlo()
+
+            smtp.login(smtp_username, smtp_password)
+            smtp.send_message(message)
+
+    except smtplib.SMTPAuthenticationError as error:
+        raise RuntimeError(
+            "The sender email account rejected the login. Use the account's "
+            "SMTP/app password (not necessarily the normal sign-in password), "
+            "then restart app.py and try again."
+        ) from error
+    except (smtplib.SMTPException, OSError) as error:
+        raise RuntimeError(
+            f"Could not connect to the configured email server ({smtp_host}:{smtp_port}). "
+            "Check the SMTP settings and internet connection, then try again."
+        ) from error
+
+
+@app.post("/api/email-transcript")
+def email_transcript():
+    """Email the current chat transcript to an address chosen by the user."""
+
+    payload = request.get_json(silent=True)
+
+    if not isinstance(payload, dict):
+        return jsonify({
+            "error": "The transcript request must contain JSON data."
+        }), 400
+
+    recipient = payload.get("email", "")
+
+    if not isinstance(recipient, str):
+        recipient = ""
+
+    recipient = recipient.strip()[:254]
+
+    if not TRANSCRIPT_EMAIL_PATTERN.fullmatch(recipient):
+        return jsonify({
+            "error": "Please enter a valid email address."
+        }), 400
+
+    transcript = build_chat_transcript(
+        payload.get("messages", [])
+    )
+
+    if not transcript:
+        return jsonify({
+            "error": "There is no chat transcript available to email."
+        }), 400
+
+    try:
+        send_chat_transcript_email(recipient, transcript)
+    except RuntimeError as error:
+        app.logger.exception(
+            "Could not email the A.I.D.A. chat transcript."
+        )
+        return jsonify({
+            "error": str(error)
+        }), 500
+    except Exception:
+        app.logger.exception(
+            "Could not email the A.I.D.A. chat transcript."
+        )
+        return jsonify({
+            "error": (
+                "The chat copy could not be emailed right now. "
+                "Please check the server email configuration and try again."
+            )
+        }), 500
+
+    return jsonify({
+        "sent": True,
+        "message": "Your chat copy was emailed successfully.",
+    })
+
+
+
+# ---------------------------------------------------------
+# A.I.D.A. interactive USL estimate and IRD directions
+# ---------------------------------------------------------
+# These values mirror the verified USL information already present in the
+# project's IRD knowledge base. The calculator is deliberately labelled as
+# an estimate and never replaces an IRD assessment.
+USL_MONTHLY_THRESHOLD_EC = 2000.00
+USL_EMPLOYEE_RATE = 0.03
+USL_EMPLOYER_MATCH_RATE = 0.03
+USL_EMPLOYER_MATCH_CAP_EC = 12000.00
+USL_SELF_EMPLOYED_RATE = 0.06
+
+IRD_OFFICE_NAME = "Inland Revenue Department, Anguilla"
+IRD_OFFICE_ADDRESS = (
+    "Former NBA Building, 1st Floor, The Valley, Anguilla"
+)
+IRD_OFFICE_HOURS = "Monday-Friday, 8:00 a.m.-3:00 p.m."
+
+
+def _maps_embed_api_key() -> str:
+    """Read the Google Maps Embed key without hard-coding credentials."""
+    return get_secret("GOOGLE_MAPS_EMBED_API_KEY", "").strip()
+
+
+@app.post("/api/tax-estimate")
+def tax_estimate():
+    """Return a conservative Universal Social Levy estimate in EC dollars."""
+    payload = request.get_json(silent=True)
+
+    if not isinstance(payload, dict):
+        return jsonify({
+            "error": "The tax estimate request must contain JSON data."
+        }), 400
+
+    taxpayer_type = str(payload.get("taxpayer_type", "")).strip().lower()
+
+    if taxpayer_type not in {"employee", "self_employed"}:
+        return jsonify({
+            "error": "Please choose employee or self-employed."
+        }), 400
+
+    try:
+        monthly_gross = float(payload.get("monthly_gross", 0))
+    except (TypeError, ValueError):
+        return jsonify({
+            "error": "Please enter your gross monthly earnings as a number."
+        }), 400
+
+    if monthly_gross < 0 or monthly_gross > 100_000_000:
+        return jsonify({
+            "error": "Please enter a valid gross monthly earnings amount."
+        }), 400
+
+    above_threshold = monthly_gross > USL_MONTHLY_THRESHOLD_EC
+
+    if not above_threshold:
+        monthly_estimate = 0.0
+        employer_match = 0.0
+        bracket = (
+            f"EC${monthly_gross:,.2f} per month is not over the "
+            f"EC${USL_MONTHLY_THRESHOLD_EC:,.2f} monthly USL threshold."
+        )
+    elif taxpayer_type == "employee":
+        monthly_estimate = monthly_gross * USL_EMPLOYEE_RATE
+        employer_match = (
+            min(monthly_gross, USL_EMPLOYER_MATCH_CAP_EC)
+            * USL_EMPLOYER_MATCH_RATE
+        )
+        bracket = (
+            "Employee earning over EC$2,000 per month: "
+            "estimated employee USL at 3% of gross monthly earnings."
+        )
+    else:
+        monthly_estimate = monthly_gross * USL_SELF_EMPLOYED_RATE
+        employer_match = 0.0
+        bracket = (
+            "Self-employed person earning over EC$2,000 per month: "
+            "estimated USL at 6% of gross monthly earnings."
+        )
+
+    response = {
+        "tax_type": "Universal Social Levy (USL)",
+        "taxpayer_type": taxpayer_type,
+        "monthly_gross": round(monthly_gross, 2),
+        "monthly_estimate": round(monthly_estimate, 2),
+        "annualized_estimate": round(monthly_estimate * 12, 2),
+        "bracket": bracket,
+        "threshold": USL_MONTHLY_THRESHOLD_EC,
+        "disclaimer": (
+            "This is only an estimate for general guidance. It is not an "
+            "official IRD assessment, tax return, or tax advice. Your actual "
+            "liability can depend on your circumstances and current IRD rules."
+        ),
+        "support_available": True,
+    }
+
+    if taxpayer_type == "employee" and above_threshold:
+        response["employer_match_estimate"] = round(employer_match, 2)
+        response["employer_match_note"] = (
+            "For context, the employer match is estimated at 3% of "
+            "remuneration up to EC$12,000 per month."
+        )
+
+    return jsonify(response)
+
+
+@app.get("/api/ird-map-config")
+def ird_map_config():
+    """Return public IRD destination data and optional Maps Embed setup."""
+    api_key = _maps_embed_api_key()
+
+    return jsonify({
+        "office_name": IRD_OFFICE_NAME,
+        "office_address": IRD_OFFICE_ADDRESS,
+        "office_hours": IRD_OFFICE_HOURS,
+        "maps_embed_api_key": api_key,
+        "directions_embed_enabled": bool(api_key),
+    })
 
 
 @app.post("/api/speech/stream")

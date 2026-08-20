@@ -3809,3 +3809,266 @@ body.aida-session-ended
         margin: 12px 10px 15px;
     }
 }
+
+/* ---------------------------------------------------------
+   End-of-chat transcript email step
+   Displayed inside A.I.D.A. before the feedback survey.
+--------------------------------------------------------- */
+.transcript-email-prompt {
+    margin: 14px 18px 12px 68px;
+    padding: 16px;
+    border: 1px solid rgba(16, 104, 69, 0.24);
+    border-radius: 18px;
+    background: #ffffff;
+    box-shadow: 0 10px 24px rgba(23, 50, 39, 0.10);
+}
+
+.transcript-email-heading {
+    display: flex;
+    align-items: flex-start;
+    gap: 12px;
+}
+
+.transcript-email-heading > div {
+    display: grid;
+    gap: 4px;
+}
+
+.transcript-email-heading strong {
+    color: #174f3a;
+    font-size: 0.98rem;
+}
+
+.transcript-email-heading span:not(.transcript-email-icon) {
+    color: #4d5e57;
+    font-size: 0.87rem;
+    line-height: 1.45;
+}
+
+.transcript-email-icon {
+    display: grid;
+    width: 38px;
+    height: 38px;
+    flex: 0 0 38px;
+    place-items: center;
+    border-radius: 50%;
+    color: #ffffff;
+    background: #116b48;
+    font-size: 1.1rem;
+}
+
+.transcript-email-choice-actions,
+.transcript-email-form-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 9px;
+    margin-top: 14px;
+}
+
+.transcript-email-prompt button {
+    min-height: 40px;
+    padding: 9px 14px;
+    border-radius: 12px;
+    font: inherit;
+    font-weight: 700;
+    cursor: pointer;
+}
+
+.transcript-email-yes-button,
+.transcript-email-send-button {
+    border: 1px solid #116b48;
+    color: #ffffff;
+    background: #116b48;
+}
+
+.transcript-email-no-button,
+.transcript-email-cancel-button {
+    border: 1px solid #b8c5bf;
+    color: #24483a;
+    background: #f7faf8;
+}
+
+.transcript-email-prompt button:disabled {
+    cursor: default;
+    opacity: 0.62;
+}
+
+.transcript-email-form {
+    margin-top: 12px;
+}
+
+.transcript-email-label {
+    display: grid;
+    gap: 7px;
+    color: #27493c;
+    font-size: 0.86rem;
+    font-weight: 700;
+}
+
+.transcript-email-input {
+    width: 100%;
+    min-height: 43px;
+    box-sizing: border-box;
+    padding: 9px 12px;
+    border: 1px solid #aabbb3;
+    border-radius: 11px;
+    outline: none;
+    background: #ffffff;
+    color: #263c34;
+    font: inherit;
+}
+
+.transcript-email-input:focus {
+    border-color: #116b48;
+    box-shadow: 0 0 0 3px rgba(17, 107, 72, 0.12);
+}
+
+.transcript-email-status {
+    min-height: 1.25em;
+    margin: 10px 0 0;
+    color: #42584f;
+    font-size: 0.82rem;
+    line-height: 1.4;
+}
+
+.transcript-email-hidden {
+    display: none !important;
+}
+
+.chat-widget.session-ended .transcript-email-prompt,
+.chat-widget.session-ended .transcript-email-prompt button,
+.chat-widget.session-ended .transcript-email-prompt input {
+    filter: none;
+}
+
+@media (max-width: 560px) {
+    .transcript-email-prompt {
+        margin-left: 12px;
+        margin-right: 12px;
+    }
+
+    .transcript-email-choice-actions,
+    .transcript-email-form-actions {
+        display: grid;
+    }
+
+    .transcript-email-prompt button {
+        width: 100%;
+    }
+}
+
+/* ---------------------------------------------------------
+   A.I.D.A. tax estimate + IRD directions responsive layout
+   Added on top of the existing interactive feature styles.
+   Keeps both cards centered in the conversation like survey.
+--------------------------------------------------------- */
+.aida-interactive-feature-group {
+    box-sizing: border-box;
+    width: 100%;
+    max-width: 100%;
+    display: flex;
+    justify-content: center;
+    align-items: flex-start;
+    padding: 8px 18px 18px;
+    margin: 0;
+}
+
+.aida-interactive-feature-group .aida-interactive-card {
+    box-sizing: border-box;
+    width: min(100%, 520px) !important;
+    max-width: 520px;
+    min-width: 0;
+    margin: 0 auto !important;
+    overflow-wrap: anywhere;
+    word-break: normal;
+}
+
+.aida-interactive-feature-group .aida-feature-body,
+.aida-interactive-feature-group .aida-feature-form,
+.aida-interactive-feature-group .aida-feature-result,
+.aida-interactive-feature-group .aida-route-result,
+.aida-interactive-feature-group label {
+    box-sizing: border-box;
+    min-width: 0;
+    max-width: 100%;
+}
+
+.aida-interactive-feature-group .aida-feature-input,
+.aida-interactive-feature-group .aida-map-frame {
+    display: block;
+    box-sizing: border-box;
+    width: 100% !important;
+    max-width: 100%;
+    min-width: 0;
+}
+
+.aida-interactive-feature-group .aida-feature-actions {
+    max-width: 100%;
+    align-items: stretch;
+}
+
+.aida-interactive-feature-group .aida-feature-button,
+.aida-interactive-feature-group .aida-feature-link {
+    box-sizing: border-box;
+    max-width: 100%;
+    white-space: normal;
+    text-align: center;
+    overflow-wrap: anywhere;
+}
+
+@media (max-width: 620px) {
+    .aida-interactive-feature-group {
+        padding: 8px 12px 16px;
+    }
+
+    .aida-interactive-feature-group .aida-interactive-card {
+        width: 100% !important;
+        max-width: 100%;
+        margin: 0 auto !important;
+        padding: 16px;
+        border-radius: 18px;
+    }
+
+    .aida-interactive-feature-group .aida-map-frame {
+        height: 280px !important;
+    }
+}
+
+@media (max-width: 430px) {
+    .aida-interactive-feature-group {
+        padding: 7px 8px 14px;
+    }
+
+    .aida-interactive-feature-group .aida-interactive-card {
+        padding: 14px;
+        border-radius: 16px;
+    }
+
+    .aida-interactive-feature-group .aida-feature-actions {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr);
+        width: 100%;
+        gap: 8px;
+    }
+
+    .aida-interactive-feature-group .aida-feature-button,
+    .aida-interactive-feature-group .aida-feature-link {
+        width: 100%;
+        min-height: 44px;
+    }
+
+    .aida-interactive-feature-group .aida-map-frame {
+        height: 240px !important;
+    }
+}
+
+@media (max-width: 340px) {
+    .aida-interactive-feature-group {
+        padding-left: 4px;
+        padding-right: 4px;
+    }
+
+    .aida-interactive-feature-group .aida-interactive-card {
+        padding: 12px;
+    }
+}

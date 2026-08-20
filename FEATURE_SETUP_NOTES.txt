@@ -1,0 +1,35 @@
+A.I.D.A. Added Features - Setup Notes
+
+1. Universal Social Levy estimate
+--------------------------------
+The estimator uses the USL information already present in the project knowledge base:
+- Employee: 3% of gross salary/wages when monthly earnings are over EC$2,000.
+- Employer match: 3% on remuneration up to EC$12,000 per month.
+- Self-employed: 6% of gross earnings when monthly earnings are over EC$2,000.
+
+The result is always labelled as an estimate and includes a button to enter the existing IRD live-support flow.
+
+2. Interactive IRD Google Maps directions
+------------------------------------------
+The chatbot can request browser geolocation or accept a manually typed starting location.
+
+For a full Google Maps directions iframe INSIDE the chatbot (route, distance and travel time), configure:
+
+GOOGLE_MAPS_EMBED_API_KEY = "your-google-maps-embed-api-key"
+
+You may place it in .streamlit/secrets.toml or use an environment variable.
+Enable the Google Maps Embed API for that Google Cloud project and restrict the key to the web origins where A.I.D.A. is hosted.
+
+If no Maps Embed API key is configured, the chatbot safely falls back to an interactive map of the IRD office plus an “Open route + live travel time” Google Maps button.
+
+IRD destination used:
+Inland Revenue Department, Former NBA Building, 1st Floor, The Valley, Anguilla.
+Office hours displayed: Monday-Friday, 8:00 a.m.-3:00 p.m.
+
+3. Running locally
+------------------
+Run the Flask server from the project folder:
+
+python app.py
+
+Then use the local Flask URL shown in the terminal, normally http://127.0.0.1:5000.

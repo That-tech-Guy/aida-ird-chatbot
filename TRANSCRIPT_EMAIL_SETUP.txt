@@ -1,0 +1,38 @@
+A.I.D.A. CHAT TRANSCRIPT EMAIL FEATURE - SMTP SETUP
+===================================================
+
+The end-of-chat transcript email feature has been added without changing the
+existing chatbot prompts, knowledge-base content, survey data, or response logic.
+
+To enable actual email delivery, add the following values to the existing
+.streamlit/secrets.toml file OR configure them as server environment variables:
+
+SMTP_HOST = "your-smtp-server.example.com"
+SMTP_PORT = "587"
+SMTP_USERNAME = "your-smtp-username"
+SMTP_PASSWORD = "your-smtp-password-or-app-password"
+SMTP_FROM_EMAIL = "sender@example.com"
+SMTP_USE_SSL = "false"
+SMTP_USE_TLS = "true"
+
+Typical configuration:
+- Port 587 normally uses SMTP_USE_TLS = "true" and SMTP_USE_SSL = "false".
+- Port 465 normally uses SMTP_USE_SSL = "true" and SMTP_USE_TLS = "false".
+- Keep SMTP usernames/passwords only in secrets.toml or server environment
+  variables. Do not place them in chatbot.js or other browser-side files.
+
+How the feature works:
+1. The visitor ends the A.I.D.A. chat.
+2. The existing end-of-chat message appears.
+3. An email-copy card appears INSIDE the chatbot before the feedback survey.
+4. The visitor chooses Yes or No inside the chatbot.
+5. If Yes, the email field appears in the same chatbot card and the visitor
+   enters the address where the transcript should be sent.
+6. The browser sends that address and the retained transcript to the Flask
+   endpoint: POST /api/email-transcript.
+7. Python sends the transcript through the configured SMTP server.
+8. Only after the visitor declines/skips the email, or after the email sends
+   successfully, the existing A.I.D.A. feedback survey appears below it.
+
+No additional Python package is required because the implementation uses the
+standard-library smtplib, ssl, and email.message modules.

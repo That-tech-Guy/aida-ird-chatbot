@@ -144,6 +144,11 @@ let liveHandoffIntake = null;
 let sessionEndReason = "inactivity_timeout";
 
 
+// Interactive estimator / directions state added without replacing the
+// original conversation, voice, forms, feedback, or live-support logic.
+let aidaFeatureCardSequence = 0;
+
+
 // ---------------------------------------------------------
 // Quick actions and popular questions
 // ---------------------------------------------------------
@@ -189,6 +194,18 @@ const quickActions = [
         icon: "card",
         question:
             "What payment methods can I use to pay taxes or fees?"
+    },
+    {
+        label: "Tax Estimate",
+        tone: "green",
+        icon: "card",
+        action: "taxEstimate"
+    },
+    {
+        label: "Directions to IRD",
+        tone: "orange",
+        icon: "home",
+        action: "irdMap"
     },
     {
         label: "Voice Mode",
@@ -1810,9 +1827,237 @@ async function endAidaSession(
             )
     );
 
+    await offerChatTranscriptEmail();
     showSessionSurvey();
 }
 
+
+
+
+async function offerChatTranscriptEmail() {
+    return new Promise((resolve) => {
+        const existingPrompt = document.getElementById(
+            "transcript-email-prompt"
+        );
+
+        if (existingPrompt) {
+            existingPrompt.remove();
+        }
+
+        const section = document.createElement("section");
+        section.className = "transcript-email-prompt";
+        section.id = "transcript-email-prompt";
+
+        section.innerHTML = `
+            <div class="transcript-email-heading">
+                <span class="transcript-email-icon" aria-hidden="true">✉</span>
+                <div>
+                    <strong>Email a copy of this chat?</strong>
+                    <span>
+                        Would you like the A.I.D.A. conversation sent to an email address of your choice?
+                    </span>
+                </div>
+            </div>
+
+            <div class="transcript-email-choice-actions">
+                <button
+                    class="transcript-email-yes-button"
+                    type="button"
+                >
+                    Yes, email my chat
+                </button>
+
+                <button
+                    class="transcript-email-no-button"
+                    type="button"
+                >
+                    No, continue to feedback
+                </button>
+            </div>
+
+            <form class="transcript-email-form transcript-email-hidden">
+                <label class="transcript-email-label">
+                    <span>Email address</span>
+                    <input
+                        class="transcript-email-input"
+                        type="email"
+                        maxlength="254"
+                        autocomplete="email"
+                        inputmode="email"
+                        placeholder="name@example.com"
+                        required
+                    >
+                </label>
+
+                <div class="transcript-email-form-actions">
+                    <button
+                        class="transcript-email-send-button"
+                        type="submit"
+                    >
+                        Send chat copy
+                    </button>
+
+                    <button
+                        class="transcript-email-cancel-button"
+                        type="button"
+                    >
+                        Skip email
+                    </button>
+                </div>
+            </form>
+
+            <p
+                class="transcript-email-status"
+                aria-live="polite"
+            ></p>
+        `;
+
+        const choiceActions = section.querySelector(
+            ".transcript-email-choice-actions"
+        );
+        const yesButton = section.querySelector(
+            ".transcript-email-yes-button"
+        );
+        const noButton = section.querySelector(
+            ".transcript-email-no-button"
+        );
+        const form = section.querySelector(
+            ".transcript-email-form"
+        );
+        const input = section.querySelector(
+            ".transcript-email-input"
+        );
+        const sendButton = section.querySelector(
+            ".transcript-email-send-button"
+        );
+        const cancelButton = section.querySelector(
+            ".transcript-email-cancel-button"
+        );
+        const status = section.querySelector(
+            ".transcript-email-status"
+        );
+
+        let finished = false;
+
+        const finishEmailStep = (message) => {
+            if (finished) {
+                return;
+            }
+
+            finished = true;
+
+            yesButton.disabled = true;
+            noButton.disabled = true;
+            sendButton.disabled = true;
+            cancelButton.disabled = true;
+            input.disabled = true;
+
+            if (message) {
+                status.textContent = message;
+            }
+
+            resolve();
+        };
+
+        yesButton.addEventListener("click", () => {
+            choiceActions.classList.add(
+                "transcript-email-hidden"
+            );
+            form.classList.remove(
+                "transcript-email-hidden"
+            );
+            status.textContent =
+                "Enter the email address where you would like the chat copy sent.";
+            input.focus();
+            scrollConversationToBottom(true);
+        });
+
+        noButton.addEventListener("click", () => {
+            finishEmailStep(
+                "No email copy requested. You can now leave feedback below."
+            );
+        });
+
+        cancelButton.addEventListener("click", () => {
+            finishEmailStep(
+                "Email skipped. You can now leave feedback below."
+            );
+        });
+
+        form.addEventListener("submit", async (event) => {
+            event.preventDefault();
+
+            const email = input.value.trim();
+
+            if (!email || !input.checkValidity()) {
+                status.textContent =
+                    "Please enter a valid email address.";
+                input.focus();
+                return;
+            }
+
+            const greeting = getSelectedLanguageOption()?.greeting;
+            const transcriptMessages = [];
+
+            if (greeting) {
+                transcriptMessages.push({
+                    role: "assistant",
+                    content: greeting
+                });
+            }
+
+            transcriptMessages.push(...conversationHistory);
+
+            sendButton.disabled = true;
+            cancelButton.disabled = true;
+            input.disabled = true;
+            status.textContent = "Sending your chat copy…";
+
+            try {
+                const response = await fetch(
+                    "/api/email-transcript",
+                    {
+                        method: "POST",
+                        headers: {
+                            "Content-Type": "application/json"
+                        },
+                        body: JSON.stringify({
+                            email,
+                            messages: transcriptMessages
+                        })
+                    }
+                );
+
+                const payload = await response.json();
+
+                if (!response.ok) {
+                    throw new Error(
+                        payload.error ||
+                        "The chat copy could not be emailed."
+                    );
+                }
+
+                finishEmailStep(
+                    payload.message ||
+                    "Your chat copy was emailed successfully. You can now leave feedback below."
+                );
+
+            } catch (error) {
+                input.disabled = false;
+                sendButton.disabled = false;
+                cancelButton.disabled = false;
+                status.textContent = (
+                    error.message ||
+                    "The chat copy could not be emailed right now."
+                );
+                input.focus();
+            }
+        });
+
+        chatMessages.appendChild(section);
+        scrollConversationToBottom(true);
+    });
+}
 
 function disconnectSessionForInactivity() {
     if (
@@ -5363,6 +5608,22 @@ function buildHelpDrawer() {
                 }
 
                 if (
+                    action.action === "taxEstimate"
+                ) {
+                    addUserMessage("Estimate my taxes");
+                    startTaxEstimateFlow();
+                    return;
+                }
+
+                if (
+                    action.action === "irdMap"
+                ) {
+                    addUserMessage("Show me directions to the Inland Revenue Department");
+                    startIrdDirectionsFlow();
+                    return;
+                }
+
+                if (
                     action.action === "voice"
                 ) {
                     toggleVoiceMode();
@@ -6421,6 +6682,393 @@ function setWaitingState(waiting) {
 }
 
 
+// ---------------------------------------------------------
+// Interactive USL estimate and IRD Google Maps directions
+// ---------------------------------------------------------
+
+function isTaxEstimateRequest(text) {
+    const value = String(text || "").toLowerCase();
+    return (
+        /\b(tax|usl|levy)\b/.test(value) &&
+        /\b(estimate|calculate|calculator|how much|owe|pay)\b/.test(value)
+    );
+}
+
+
+function isIrdDirectionsRequest(text) {
+    const value = String(text || "").toLowerCase();
+    return (
+        /\b(ird|inland revenue|revenue department)\b/.test(value) &&
+        /\b(map|direction|directions|route|location|where|find|get there|travel|drive)\b/.test(value)
+    );
+}
+
+
+function appendInteractiveFeatureCard(card) {
+    const group = document.createElement("div");
+    group.className = "message-group aida-interactive-feature-group";
+    group.appendChild(card);
+    chatMessages.appendChild(group);
+    scrollConversationToBottom(true);
+}
+
+
+function featureCardBase(title, intro) {
+    const card = document.createElement("section");
+    card.className = "aida-interactive-card";
+    card.innerHTML = `
+        <style>
+            .aida-interactive-card {
+                box-sizing: border-box;
+                width: min(100%, 520px);
+                margin: 8px 12px 16px 58px;
+                padding: 18px;
+                border: 1px solid rgba(0, 104, 74, .24);
+                border-radius: 20px;
+                background: #fff;
+                box-shadow: 0 10px 28px rgba(0, 62, 45, .08);
+                color: #173d32;
+            }
+            .aida-interactive-card h3 {
+                margin: 0 0 6px;
+                font-size: 1.05rem;
+                color: #005f46;
+            }
+            .aida-interactive-card p { margin: 6px 0 12px; line-height: 1.45; }
+            .aida-feature-question { font-weight: 700; margin-top: 14px !important; }
+            .aida-feature-actions { display: flex; flex-wrap: wrap; gap: 9px; margin: 10px 0; }
+            .aida-feature-button, .aida-feature-link {
+                border: 1px solid #0b7658;
+                border-radius: 12px;
+                padding: 10px 14px;
+                background: #0b7658;
+                color: #fff;
+                font: inherit;
+                font-weight: 700;
+                cursor: pointer;
+                text-decoration: none;
+            }
+            .aida-feature-button.secondary, .aida-feature-link.secondary {
+                background: #fff;
+                color: #0b5f49;
+            }
+            .aida-feature-button:disabled { opacity: .58; cursor: wait; }
+            .aida-feature-form { display: grid; gap: 10px; margin-top: 12px; }
+            .aida-feature-form label { font-weight: 700; }
+            .aida-feature-input {
+                box-sizing: border-box;
+                width: 100%;
+                padding: 11px 12px;
+                border: 1px solid #8eaaa1;
+                border-radius: 12px;
+                font: inherit;
+            }
+            .aida-feature-status { min-height: 1.25em; font-size: .92rem; }
+            .aida-feature-result {
+                margin-top: 14px;
+                padding: 14px;
+                border-radius: 14px;
+                background: #f1f7f4;
+            }
+            .aida-feature-result strong { color: #005f46; }
+            .aida-feature-disclaimer {
+                margin-top: 12px !important;
+                padding: 10px 12px;
+                border-left: 4px solid #d88400;
+                background: #fff8e9;
+                font-size: .9rem;
+            }
+            .aida-map-frame {
+                width: 100%;
+                height: 330px;
+                border: 0;
+                border-radius: 14px;
+                margin-top: 10px;
+                background: #eef3f1;
+            }
+            @media (max-width: 620px) {
+                .aida-interactive-card { margin-left: 12px; }
+                .aida-map-frame { height: 290px; }
+            }
+        </style>
+        <h3>${title}</h3>
+        <p>${intro}</p>
+        <div class="aida-feature-body"></div>
+    `;
+    return card;
+}
+
+
+function startTaxEstimateFlow() {
+    closeHelpDrawer();
+    registerUserActivity();
+
+    const card = featureCardBase(
+        "A.I.D.A. tax estimate",
+        "I can give you a general Universal Social Levy (USL) estimate. I need two details first so I can determine which USL category applies."
+    );
+    const body = card.querySelector(".aida-feature-body");
+
+    body.innerHTML = `
+        <p class="aida-feature-question">1. Are you an employee or self-employed?</p>
+        <div class="aida-feature-actions">
+            <button type="button" class="aida-feature-button" data-taxpayer-type="employee">Employee</button>
+            <button type="button" class="aida-feature-button secondary" data-taxpayer-type="self_employed">Self-employed</button>
+        </div>
+        <div class="aida-tax-income-step" hidden></div>
+        <p class="aida-feature-status" aria-live="polite"></p>
+    `;
+
+    const status = body.querySelector(".aida-feature-status");
+    const incomeStep = body.querySelector(".aida-tax-income-step");
+
+    body.querySelectorAll("[data-taxpayer-type]").forEach((button) => {
+        button.addEventListener("click", () => {
+            const taxpayerType = button.dataset.taxpayerType;
+            const label = taxpayerType === "employee" ? "salary or wages" : "earnings";
+
+            body.querySelectorAll("[data-taxpayer-type]").forEach((item) => {
+                item.classList.toggle("secondary", item !== button);
+            });
+
+            incomeStep.hidden = false;
+            incomeStep.innerHTML = `
+                <form class="aida-feature-form">
+                    <label>
+                        2. What are your gross monthly ${label} in EC$?
+                        <input
+                            class="aida-feature-input"
+                            name="monthlyGross"
+                            type="number"
+                            min="0"
+                            step="0.01"
+                            inputmode="decimal"
+                            placeholder="For example: 3500"
+                            required
+                        >
+                    </label>
+                    <div class="aida-feature-actions">
+                        <button class="aida-feature-button" type="submit">Calculate estimate</button>
+                    </div>
+                </form>
+                <div class="aida-feature-result" hidden></div>
+            `;
+
+            const form = incomeStep.querySelector("form");
+            const input = form.querySelector("input");
+            const resultBox = incomeStep.querySelector(".aida-feature-result");
+            input.focus();
+            scrollConversationToBottom(true);
+
+            form.addEventListener("submit", async (event) => {
+                event.preventDefault();
+                const monthlyGross = Number(input.value);
+                const submitButton = form.querySelector("button[type='submit']");
+
+                if (!Number.isFinite(monthlyGross) || monthlyGross < 0) {
+                    status.textContent = "Please enter a valid gross monthly amount.";
+                    return;
+                }
+
+                submitButton.disabled = true;
+                status.textContent = "Calculating your estimate…";
+
+                try {
+                    const response = await fetch("/api/tax-estimate", {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({
+                            taxpayer_type: taxpayerType,
+                            monthly_gross: monthlyGross
+                        })
+                    });
+                    const payload = await response.json();
+                    if (!response.ok) {
+                        throw new Error(payload.error || "The estimate could not be calculated.");
+                    }
+
+                    const employerContext = payload.employer_match_estimate != null
+                        ? `<p><strong>Estimated employer match:</strong> EC$${Number(payload.employer_match_estimate).toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})} per month</p><p>${payload.employer_match_note}</p>`
+                        : "";
+
+                    resultBox.hidden = false;
+                    resultBox.innerHTML = `
+                        <p><strong>Your USL category:</strong> ${payload.bracket}</p>
+                        <p><strong>Estimated monthly USL:</strong> EC$${Number(payload.monthly_estimate).toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}</p>
+                        <p><strong>Annualised estimate:</strong> EC$${Number(payload.annualized_estimate).toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}</p>
+                        ${employerContext}
+                        <p class="aida-feature-disclaimer"><strong>Estimate only:</strong> ${payload.disclaimer}</p>
+                        <div class="aida-feature-actions">
+                            <button type="button" class="aida-feature-button aida-tax-support-button">Talk to IRD support staff</button>
+                        </div>
+                    `;
+                    status.textContent = "Estimate complete.";
+
+                    resultBox.querySelector(".aida-tax-support-button")?.addEventListener("click", () => {
+                        startLiveHandoffIntake("Tax estimate follow-up");
+                    });
+                    scrollConversationToBottom(true);
+                } catch (error) {
+                    status.textContent = error.message || "The estimate could not be calculated right now.";
+                } finally {
+                    submitButton.disabled = false;
+                }
+            });
+        });
+    });
+
+    appendInteractiveFeatureCard(card);
+}
+
+
+function buildGoogleDirectionsUrls(origin, config) {
+    const destination = config.office_address || "Former NBA Building, 1st Floor, The Valley, Anguilla";
+    const originEncoded = encodeURIComponent(origin);
+    const destinationEncoded = encodeURIComponent(destination);
+
+    const externalUrl =
+        `https://www.google.com/maps/dir/?api=1&origin=${originEncoded}` +
+        `&destination=${destinationEncoded}&travelmode=driving`;
+
+    let embedUrl =
+        `https://www.google.com/maps?q=${destinationEncoded}&output=embed`;
+
+    if (config.directions_embed_enabled && config.maps_embed_api_key) {
+        embedUrl =
+            `https://www.google.com/maps/embed/v1/directions?key=${encodeURIComponent(config.maps_embed_api_key)}` +
+            `&origin=${originEncoded}&destination=${destinationEncoded}&mode=driving`;
+    }
+
+    return { externalUrl, embedUrl };
+}
+
+
+async function showIrdRoute(card, originLabel, originValue) {
+    const body = card.querySelector(".aida-feature-body");
+    const status = body.querySelector(".aida-feature-status");
+    status.textContent = "Loading directions…";
+
+    try {
+        const response = await fetch("/api/ird-map-config");
+        const config = await response.json();
+        if (!response.ok) {
+            throw new Error(config.error || "IRD map information is unavailable.");
+        }
+
+        const { externalUrl, embedUrl } = buildGoogleDirectionsUrls(originValue, config);
+        const routeArea = body.querySelector(".aida-route-result");
+        routeArea.hidden = false;
+        routeArea.innerHTML = `
+            <div class="aida-feature-result">
+                <p><strong>Starting from:</strong> ${originLabel}</p>
+                <p><strong>Destination:</strong> ${config.office_name}<br>${config.office_address}</p>
+                <p><strong>IRD office hours:</strong> ${config.office_hours}</p>
+                <p>${config.directions_embed_enabled
+                    ? "The interactive Google map below shows the driving route, distance and travel time."
+                    : "The map below shows the IRD location. Use the Google Maps button for the driving route and live travel time; an Embed API key can be configured to show the route and time directly inside A.I.D.A."}</p>
+                <iframe
+                    class="aida-map-frame"
+                    title="Google Maps directions to Inland Revenue Department Anguilla"
+                    loading="lazy"
+                    allowfullscreen
+                    referrerpolicy="no-referrer-when-downgrade"
+                    src="${embedUrl}"
+                ></iframe>
+                <div class="aida-feature-actions">
+                    <a class="aida-feature-link" href="${externalUrl}" target="_blank" rel="noopener noreferrer">Open route + live travel time</a>
+                    <button type="button" class="aida-feature-button secondary aida-map-support-button">Talk to IRD support staff</button>
+                </div>
+            </div>
+        `;
+        routeArea.querySelector(".aida-map-support-button")?.addEventListener("click", () => {
+            startLiveHandoffIntake("IRD location and directions follow-up");
+        });
+        status.textContent = "Directions ready.";
+        scrollConversationToBottom(true);
+    } catch (error) {
+        status.textContent = error.message || "The directions could not be loaded right now.";
+    }
+}
+
+
+function startIrdDirectionsFlow() {
+    closeHelpDrawer();
+    registerUserActivity();
+
+    const card = featureCardBase(
+        "Directions to the Inland Revenue Department",
+        "What is your starting location? You can let A.I.D.A. use your current browser location or type a starting place in Anguilla."
+    );
+    const body = card.querySelector(".aida-feature-body");
+
+    body.innerHTML = `
+        <div class="aida-feature-actions">
+            <button type="button" class="aida-feature-button aida-use-location-button">Use my current location</button>
+        </div>
+        <form class="aida-feature-form aida-manual-location-form">
+            <label>
+                Or enter your starting location
+                <input class="aida-feature-input" type="text" maxlength="180" placeholder="For example: Blowing Point, Anguilla" required>
+            </label>
+            <div class="aida-feature-actions">
+                <button class="aida-feature-button secondary" type="submit">Show directions</button>
+            </div>
+        </form>
+        <p class="aida-feature-status" aria-live="polite"></p>
+        <div class="aida-route-result" hidden></div>
+    `;
+
+    const status = body.querySelector(".aida-feature-status");
+    const geolocationButton = body.querySelector(".aida-use-location-button");
+    const manualForm = body.querySelector(".aida-manual-location-form");
+    const manualInput = manualForm.querySelector("input");
+
+    geolocationButton.addEventListener("click", () => {
+        if (!navigator.geolocation) {
+            status.textContent = "This browser does not provide location access. Please type your starting location instead.";
+            manualInput.focus();
+            return;
+        }
+
+        geolocationButton.disabled = true;
+        status.textContent = "Waiting for permission to use your location…";
+
+        navigator.geolocation.getCurrentPosition(
+            (position) => {
+                geolocationButton.disabled = false;
+                const latitude = Number(position.coords.latitude).toFixed(6);
+                const longitude = Number(position.coords.longitude).toFixed(6);
+                void showIrdRoute(card, "Your current location", `${latitude},${longitude}`);
+            },
+            (error) => {
+                geolocationButton.disabled = false;
+                status.textContent = error.code === 1
+                    ? "Location permission was not granted. Type your starting location below instead."
+                    : "Your current location could not be read. Type your starting location below instead.";
+                manualInput.focus();
+            },
+            {
+                enableHighAccuracy: false,
+                timeout: 10000,
+                maximumAge: 300000
+            }
+        );
+    });
+
+    manualForm.addEventListener("submit", (event) => {
+        event.preventDefault();
+        const location = manualInput.value.trim();
+        if (!location) {
+            status.textContent = "Please enter a starting location.";
+            return;
+        }
+        void showIrdRoute(card, location, location);
+    });
+
+    appendInteractiveFeatureCard(card);
+}
+
+
 async function requestAidaResponse(
     question,
     options = {}
@@ -6563,6 +7211,22 @@ async function submitMessage(
         startLiveHandoffIntake(
             cleanedDisplayText
         );
+        return;
+    }
+
+    if (isTaxEstimateRequest(cleanedQuestion)) {
+        closeHelpDrawer();
+        addUserMessage(cleanedDisplayText);
+        chatInput.value = "";
+        startTaxEstimateFlow();
+        return;
+    }
+
+    if (isIrdDirectionsRequest(cleanedQuestion)) {
+        closeHelpDrawer();
+        addUserMessage(cleanedDisplayText);
+        chatInput.value = "";
+        startIrdDirectionsFlow();
         return;
     }
 
